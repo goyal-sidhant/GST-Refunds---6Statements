@@ -139,6 +139,10 @@ TEMPLATE_ERRORS: dict[str, str] = {
         "Sheet '{sheet_name}' has no data rows. "
         "Please enter at least one row of data before processing."
     ),
+    "all_sheets_empty": (
+        "No data found in any sheet. "
+        "Please enter at least one row of data in at least one sheet before processing."
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -508,5 +512,9 @@ WARNINGS: dict[str, str] = {
     ),
     "empty_rows_summary": (
         "{sheet} Sheet: {count} empty row(s) were skipped: {rows}."
+    ),
+    "empty_sheet_skipped": (
+        "Sheet '{sheet_name}' has no data rows — it will be skipped. "
+        "This is fine if you only have data in the other sheet(s)."
     ),
 }

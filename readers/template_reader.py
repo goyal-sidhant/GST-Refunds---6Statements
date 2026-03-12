@@ -27,6 +27,8 @@ CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 11-03-2026 | Created — template reading pipeline | Phase 0 infrastructure setup       |
+| 12-03-2026 | Empty sheet → warning not error     | Valid to file only Goods or Services |
+| 12-03-2026 | Use parse_period() for period cells  | Excel converts MM-YYYY to datetime |
 """
 
 from readers.excel_reader import open_workbook, read_cell, read_data_rows
@@ -36,7 +38,7 @@ from models.header import HeaderData
 from models.data_row import DataRow
 from models.validation_result import ValidationResult
 from config.error_messages import TEMPLATE_ERRORS, WARNINGS
-from utils.date_helpers import parse_date
+from utils.date_helpers import parse_date, parse_period
 
 
 def read_template(
@@ -156,15 +158,26 @@ def read_template(
                         category="general",
                     )
 
-        # Check for completely empty sheet
-        if not data_rows:
-            result.add_error(
-                message=TEMPLATE_ERRORS["empty_sheet"].format(sheet_name=sheet_config.name),
-                sheet=sheet_config.name,
-                category="template",
-            )
-
         sheets_data[sheet_config.name] = data_rows
+
+    # --- Check if ALL sheets are empty (error) vs SOME empty (warning) ---
+    sheets_with_data = [name for name, rows in sheets_data.items() if rows]
+    empty_sheets = [name for name, rows in sheets_data.items() if not rows]
+
+    if not sheets_with_data:
+        # ALL sheets are empty — this is an error, nothing to process
+        result.add_error(
+            message=TEMPLATE_ERRORS["all_sheets_empty"],
+            category="template",
+        )
+    elif empty_sheets:
+        # SOME sheets are empty — just a warning, the non-empty ones will be processed
+        for sheet_name in empty_sheets:
+            result.add_warning(
+                message=WARNINGS["empty_sheet_skipped"].format(sheet_name=sheet_name),
+                sheet=sheet_name,
+                category="general",
+            )
 
     workbook.close()
     return {"success": True, "header": header, "sheets": sheets_data}
@@ -190,12 +203,14 @@ def _read_header(workbook: object, config: StatementConfig) -> HeaderData:
         from_cell = config.header_cells.get("from_period")
         if from_cell:
             raw = read_cell(header_sheet, from_cell[0], from_cell[1])
-            header.from_period = str(raw).strip() if raw is not None else ""
+            # Excel may auto-convert "04-2024" to datetime — parse_period handles this
+            header.from_period = parse_period(raw)
 
         to_cell = config.header_cells.get("to_period")
         if to_cell:
             raw = read_cell(header_sheet, to_cell[0], to_cell[1])
-            header.to_period = str(raw).strip() if raw is not None else ""
+            # Excel may auto-convert "04-2024" to datetime — parse_period handles this
+            header.to_period = parse_period(raw)
 
     # Order fields (S06)
     if config.header_mode == HeaderMode.ORDER:

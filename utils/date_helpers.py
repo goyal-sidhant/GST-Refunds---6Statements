@@ -8,6 +8,7 @@ PURPOSE: Date parsing, conversion, and calculation helpers. Handles the
 
 CONTAINS:
 - parse_date()                — Converts various date inputs to DD-MM-YYYY string
+- parse_period()              — Converts various period inputs to MM-YYYY string
 - parse_date_to_object()      — Converts DD-MM-YYYY string to datetime.date
 - period_to_mmyyyy()          — Converts MM-YYYY to mmyyyy (strips hyphen for JSON)
 - get_financial_year()        — Returns FY year for a given date/month
@@ -23,11 +24,13 @@ USED BY:
 - core/duplicate_detector.py  → get_financial_year(), get_month_from_date()
 - core/date_validators.py     → is_date_before()
 - core/generators/*.py        → period_to_mmyyyy()
+- readers/template_reader.py  → parse_period() for header period cells
 
 CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 11-03-2026 | Created — date utility functions    | Phase 0 infrastructure setup       |
+| 12-03-2026 | Added parse_period() for MM-YYYY    | Excel converts 04-2024 to datetime |
 """
 
 from datetime import date, datetime
@@ -79,6 +82,51 @@ def parse_date(value: object) -> str:
 
     # Convert / separators to - (some users may use DD/MM/YYYY)
     text = text.replace("/", "-")
+
+    return text
+
+
+def parse_period(value: object) -> str:
+    """
+    WHAT:
+        Converts various period representations to a MM-YYYY string.
+        Handles: datetime objects (Excel auto-converts "04-2024" to a
+        datetime), date objects, and plain strings.
+
+    WHY ADDED:
+        When a user types "04-2024" in an Excel cell, Excel may auto-format
+        it as a date (2024-04-01 00:00:00). The reader was doing str(raw)
+        which gave "2024-04-01 00:00:00" — failing the MM-YYYY regex.
+        This function detects datetime objects and extracts MM-YYYY.
+
+    CALLED BY:
+        → readers/template_reader.py → _read_header() for from_period, to_period
+
+    EDGE CASES HANDLED:
+        - None → returns empty string
+        - datetime.datetime → extracts month-year as MM-YYYY
+        - datetime.date → formats as MM-YYYY
+        - String → strips whitespace, returns as-is (regex validates later)
+
+    PARAMETERS:
+        value (object): Raw cell value from openpyxl.
+
+    RETURNS:
+        str: Period in MM-YYYY format, or empty string if None.
+    """
+    if value is None:
+        return ""
+
+    # Excel converts "04-2024" to datetime(2024, 4, 1) — extract MM-YYYY
+    if isinstance(value, datetime):
+        return value.strftime("%m-%Y")
+
+    if isinstance(value, date):
+        return value.strftime("%m-%Y")
+
+    text = str(value).strip()
+    if not text:
+        return ""
 
     return text
 

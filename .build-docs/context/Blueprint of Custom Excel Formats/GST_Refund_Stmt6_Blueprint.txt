@@ -1,0 +1,303 @@
+================================================================================
+  GST REFUND STATEMENT 6 — CUSTOM TEMPLATE BLUEPRINT
+  Refund — Tax Paid on Intra-State Supply Held to be Inter-State & Vice Versa
+  (Change of Place of Supply — INTRVC)
+  Template File: GST_Refund_Stmt6_Template.xlsx
+  For App Developer Reference
+================================================================================
+
+================================================================================
+1. TEMPLATE IDENTITY
+================================================================================
+
+Template File        : GST_Refund_Stmt6_Template.xlsx
+Refund Code          : INTRVC
+JSON Version         : 2.0
+JSON Statement Key   : stmt06
+Legal Basis          : Section 77(1) CGST Act, Section 19 IGST Act, Rule 89(2)(j)
+Refund Category      : Correction/Reclassification (tax paid under wrong POS)
+
+Sheets:
+  1. Overview         — Metadata and colour coding legend
+  2. Header           — GSTIN, Order No, Order Date
+  3. Inter to Intra   — Originally Inter-State (IGST), corrected to Intra-State (CGST+SGST)
+                        14 columns, data from row 2
+  4. Intra to Inter   — Originally Intra-State (CGST+SGST), corrected to Inter-State (IGST)
+                        14 columns, data from row 2
+  5. Help             — Field specs, B2B/B2C logic, validation rules, tool usage
+
+Row 1 = Column headers (colour-coded: blue=mandatory, green=optional, light blue=conditional)
+Data starts at row 2 — no gap row
+
+DESIGN RATIONALE — WHY TWO SHEETS:
+  The correction direction (Inter→Intra vs Intra→Inter) determines which tax
+  columns are relevant. In a single-sheet design, 3 out of 6 tax columns would
+  always be blank on every row. By splitting into two sheets:
+  - Each sheet has exactly 14 columns, zero dead columns
+  - The sheet name IS the classification direction (no dropdown needed)
+  - Column headers are specific: "IGST Paid" not "Earlier IGST"
+  - User cannot accidentally enter wrong tax type for the direction
+
+================================================================================
+2. HEADER SHEET — Reading Logic
+================================================================================
+
+Cell Mapping:
+  A2 = "GSTIN"        → B2 = value  → JSON key: "gstin"
+  A3 = "Order No"      → B3 = value  → JSON key: "orderNo"
+  A4 = "Order Date"    → B4 = value  → JSON key: "orderDt"
+
+Hardcoded by app:
+  "refundRsn": "INTRVC"
+  "version": "2.0"
+
+UNIQUE TO S06 — ORDER DETAILS INSTEAD OF RETURN PERIODS:
+  S06 does not have fromFp/toFp. Instead it has orderNo and orderDt, which
+  reference the order/ruling under Section 77(1) / Section 19 that establishes
+  the POS correction.
+
+Validations:
+  GSTIN      → Standard GSTIN regex. Auto upper-case and trim.
+  Order No   → Mandatory. Free text.
+  Order Date → Mandatory. Valid calendar date (DD-MM-YYYY).
+
+================================================================================
+3. INTER TO INTRA SHEET — Column Specification
+================================================================================
+
+Direction: Transaction was taxed as INTER-STATE, now corrected to INTRA-STATE.
+Earlier tax = IGST. Correct tax = CGST + SGST.
+App derives: bInt = "Inter", aInt = "Intra" from sheet name.
+
+Col | Header           | JSON Key | Type          | Mandatory   | Notes
+----|------------------|----------|---------------|-------------|-------------------
+A   | Recipient GSTIN  | uin      | Text (15)     | Conditional | Fill for B2B; blank for B2C
+B   | Recipient Name   | (B2C name)| Text (200)   | Conditional | Fill for B2C; optional for B2B
+C   | Doc Type         | docType  | Text          | Required    | Dropdown: Invoice, Debit Note, Credit Note
+D   | Doc No           | inum     | Text (16)     | Required    | Alphanumeric + / and -
+E   | Doc Date         | idt      | DD-MM-YYYY    | Required    | >= 01-07-2017, <= current
+F   | Doc Value        | val      | Number (15,2) | Required    | >= 0
+G   | Taxable Value    | txVal    | Number (15,2) | Required    | >= 0
+H   | IGST Paid        | (note)   | Number (15,2) | Required    | Earlier IGST (the wrong tax paid)
+I   | Earlier Cess     | bCess    | Number (15,2) | Optional    | Omitted from JSON if blank
+J   | Earlier POS      | bPOS     | Text          | Required    | Dropdown: 38 state/UT codes
+K   | Correct CGST     | (note)   | Number (15,2) | Required    | CGST under correct classification
+L   | Correct SGST     | (note)   | Number (15,2) | Required    | SGST under correct classification
+M   | Correct Cess     | aCess    | Number (15,2) | Optional    | Omitted from JSON if blank
+N   | Correct POS      | aPOS     | Text          | Required    | Dropdown: 38 state/UT codes
+
+Data starts at row 2.
+
+JSON KEY MAPPING FOR INTER TO INTRA:
+  Col H (IGST Paid)    → JSON: bIGST (no bCGST/bSGST — they don't exist for Inter)
+  Col K (Correct CGST)  → JSON: aCGST (no aIGST — doesn't exist for Intra)
+  Col L (Correct SGST)  → JSON: aSGST
+
+  Government VBA uses different key names depending on direction:
+    Inter to Intra: bCGST = the IGST value (misleading govt key name),
+    but the JSON also uses bIGST in some paths.
+  
+  RECOMMENDATION: Follow the government JSON key structure exactly as per
+  the VBA createJsonFile function. The four conditional paths in VBA are
+  based on bCess/aCess presence. See Section 5 for JSON schema.
+
+================================================================================
+4. INTRA TO INTER SHEET — Column Specification
+================================================================================
+
+Direction: Transaction was taxed as INTRA-STATE, now corrected to INTER-STATE.
+Earlier tax = CGST + SGST. Correct tax = IGST.
+App derives: bInt = "Intra", aInt = "Inter" from sheet name.
+
+Col | Header           | JSON Key | Type          | Mandatory   | Notes
+----|------------------|----------|---------------|-------------|-------------------
+A   | Recipient GSTIN  | uin      | Text (15)     | Conditional | Fill for B2B; blank for B2C
+B   | Recipient Name   | (B2C name)| Text (200)   | Conditional | Fill for B2C; optional for B2B
+C   | Doc Type         | docType  | Text          | Required    | Dropdown: Invoice, Debit Note, Credit Note
+D   | Doc No           | inum     | Text (16)     | Required    | Alphanumeric + / and -
+E   | Doc Date         | idt      | DD-MM-YYYY    | Required    | >= 01-07-2017, <= current
+F   | Doc Value        | val      | Number (15,2) | Required    | >= 0
+G   | Taxable Value    | txVal    | Number (15,2) | Required    | >= 0
+H   | CGST Paid        | bCGST   | Number (15,2) | Required    | Earlier CGST (the wrong tax paid)
+I   | SGST Paid        | bSGST   | Number (15,2) | Required    | Earlier SGST (paired with CGST)
+J   | Earlier Cess     | bCess    | Number (15,2) | Optional    | Omitted from JSON if blank
+K   | Earlier POS      | bPOS     | Text          | Required    | Dropdown: 38 state/UT codes
+L   | Correct IGST     | aIGST   | Number (15,2) | Required    | IGST under correct classification
+M   | Correct Cess     | aCess    | Number (15,2) | Optional    | Omitted from JSON if blank
+N   | Correct POS      | aPOS     | Text          | Required    | Dropdown: 38 state/UT codes
+
+Data starts at row 2.
+
+================================================================================
+5. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "[from Header B2]",
+  "orderNo": "[from Header B3]",
+  "orderDt": "[from Header B4]",
+  "refundRsn": "INTRVC",
+  "version": "2.0",
+  "stmt06": [ ...array of nodes... ]
+}
+
+NOTE: No fromFp/toFp. Uses orderNo/orderDt instead.
+
+JSON NODE — FOUR PATHS based on bCess and aCess presence:
+
+Path 1: Both Earlier Cess and Correct Cess present:
+  All keys emitted including bCess and aCess.
+
+Path 2: Both blank:
+  bCess and aCess omitted from JSON.
+
+Path 3: Earlier Cess blank, Correct Cess present:
+  bCess omitted, aCess included.
+
+Path 4: Earlier Cess present, Correct Cess blank:
+  bCess included, aCess omitted.
+
+COMMON JSON KEYS (all paths):
+  "sno", "invType" (B2B/B2C), "uin" (GSTIN or blank),
+  "docType", "inum", "idt", "val", "txVal",
+  "bInt" (Inter/Intra), "bCGST", "bSGST", "bPOS",
+  "aInt" (Inter/Intra), "aIGST", "aPOS"
+
+APP MUST MAP SHEET COLUMNS TO CORRECT JSON KEYS:
+
+  Inter to Intra sheet:
+    bInt = "Inter" (hardcoded from sheet name)
+    aInt = "Intra" (hardcoded from sheet name)
+    Col H (IGST Paid)    → bCGST in JSON (govt VBA maps IGST to bCGST key)
+    Col K (Correct CGST)  → NOT a separate key — see govt VBA
+    Col L (Correct SGST)  → NOT a separate key — see govt VBA
+    NOTE: Study the government VBA createJsonFile carefully for exact
+    key assignment. The govt code uses bCGST/bSGST for the "Earlier" block
+    regardless of Inter/Intra, and aIGST for the "Correct" block.
+
+  Intra to Inter sheet:
+    bInt = "Intra" (hardcoded)
+    aInt = "Inter" (hardcoded)
+    Col H (CGST Paid)    → bCGST
+    Col I (SGST Paid)    → bSGST
+    Col L (Correct IGST)  → aIGST
+
+B2B/B2C DERIVATION:
+  invType = "B2B" if Recipient GSTIN is filled, "B2C" if blank.
+  No explicit B2B/B2C column in the template.
+
+SERIAL NUMBER:
+  Auto-generated by app across both sheets. Inter to Intra rows numbered
+  first, then Intra to Inter rows continue the sequence.
+
+================================================================================
+6. PLACE OF SUPPLY MASTER LIST (38 entries)
+================================================================================
+
+The following values are available as dropdown in both POS columns:
+
+  01-Jammu and Kashmir       02-Himachal Pradesh      03-Punjab
+  04-Chandigarh              05-Uttarakhand           06-Haryana
+  07-Delhi                   08-Rajasthan             09-Uttar Pradesh
+  10-Bihar                   11-Sikkim                12-Arunachal Pradesh
+  13-Nagaland                14-Manipur               15-Mizoram
+  16-Tripura                 17-Meghalaya             18-Assam
+  19-West Bengal             20-Jharkhand             21-Odisha
+  22-Chhattisgarh            23-Madhya Pradesh        24-Gujarat
+  25-Daman and Diu           26-Dadra and Nagaraveli  27-Maharashtra
+  29-Karnataka               30-Goa                   31-Lakshadweep
+  32-Kerala                  33-Tamil Nadu            34-Puducherry
+  35-Andaman and Nicobar     36-Telangana             37-Andhra Pradesh
+  38-Ladakh                  97-Other Territory
+
+Format in JSON: the POS value as-is (e.g., "19-West Bengal").
+Note: Code 28 is missing (old Andhra Pradesh before bifurcation).
+
+================================================================================
+7. REGEX PATTERNS FOR APP VALIDATION
+================================================================================
+
+GSTIN_REGEX      = ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$
+INV_DATE_REGEX   = ^[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$
+INVOICE_REGEX    = ^[a-zA-Z0-9\/-]{0,16}$
+AMT_REGEX        = ^([0-9]{0,15})([.][0-9]{0,2})?$
+
+================================================================================
+8. APP PROCESSING FLOW
+================================================================================
+
+1. Read Header sheet → extract GSTIN, orderNo, orderDt
+2. Validate header fields (GSTIN regex, Order No mandatory, Order Date valid)
+3. Read "Inter to Intra" sheet from row 2 → skip empty rows
+4. For each row:
+   a. Derive invType: GSTIN filled → B2B, blank → B2C
+   b. For B2C: validate Recipient Name is present
+   c. Validate Doc Type, Doc No, Doc Date, Doc Value, Taxable Value
+   d. Validate IGST Paid (required, >= 0)
+   e. Validate Earlier Cess if present
+   f. Validate Earlier POS (must be from master list)
+   g. Validate Correct CGST and Correct SGST (both required, >= 0)
+   h. Validate Correct Cess if present
+   i. Validate Correct POS (must be from master list)
+   j. Set bInt = "Inter", aInt = "Intra"
+   k. Check for duplicates
+   l. Build JSON node
+5. Read "Intra to Inter" sheet from row 2 → skip empty rows
+6. For each row:
+   a-i. Same validations as above, but:
+      - Validate CGST Paid and SGST Paid (both required)
+      - Validate Correct IGST (required)
+   j. Set bInt = "Intra", aInt = "Inter"
+   k-l. Same as above
+7. If any errors → report all, do NOT generate JSON
+8. If zero errors → assemble JSON envelope, write to file
+
+================================================================================
+9. THINGS TO WATCH OUT FOR (APP DEVELOPER NOTES)
+================================================================================
+
+1. ORDER NO/DATE INSTEAD OF RETURN PERIODS — S06 is the only statement
+   with orderNo and orderDt in JSON instead of fromFp/toFp.
+
+2. B2B/B2C IS DERIVED, NOT ENTERED — No B2B/B2C column exists. App checks
+   if Recipient GSTIN is filled (B2B) or blank (B2C). For B2C, Name must be
+   present. At least one of GSTIN or Name must exist on every row.
+
+3. CESS IS OMITTED, NOT DEFAULTED — Unlike S01A (where blank tax → 0),
+   S06 omits bCess and aCess from JSON when blank. Four conditional JSON
+   paths handle the combinations.
+
+4. CLASSIFICATION DIRECTION FROM SHEET NAME — The app hardcodes bInt/aInt
+   based on which sheet the row came from. No Inter/Intra column in template.
+   Inter to Intra sheet → bInt="Inter", aInt="Intra".
+   Intra to Inter sheet → bInt="Intra", aInt="Inter".
+
+5. JSON KEY MAPPING IS NOT INTUITIVE — The government VBA uses bCGST and
+   bSGST as JSON keys for the "Earlier" block even when the earlier
+   classification was Inter-State (where you'd expect bIGST). Study the
+   VBA createJsonFile function carefully. The app must replicate the exact
+   same key structure for portal compatibility.
+
+6. PLACE OF SUPPLY — Must match one of the 38 values exactly. The format
+   is "XX-State Name" (e.g., "19-West Bengal"). Code 28 is intentionally
+   absent (pre-bifurcation Andhra Pradesh).
+
+7. SAMPLE DATA IN TEMPLATE — Inter to Intra sheet sample shows a B2B
+   transaction (GSTIN filled, Name blank). Intra to Inter sample shows
+   B2C (GSTIN blank, Name filled). This demonstrates both patterns.
+
+8. NO EXPORT EVIDENCE — S06 has no Port Code, Shipping Bill, EGM, BRC/FIRC.
+   This is purely a domestic classification correction.
+
+9. SERIAL NUMBERING — Sequential across both sheets. Inter to Intra rows
+   numbered first. If Inter to Intra has 10 rows, Intra to Inter starts at 11.
+
+10. EACH ROW IS A REAL LINKAGE — Unlike S01A (where inward/outward are
+    independent totals), in S06 the Earlier and Correct blocks describe the
+    SAME transaction. They must stay paired. This is why we did NOT split
+    them into separate sheets (unlike S01A).
+
+================================================================================
+  END OF S06 CUSTOM TEMPLATE BLUEPRINT
+================================================================================

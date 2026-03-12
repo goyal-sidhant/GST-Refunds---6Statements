@@ -1,0 +1,239 @@
+================================================================================
+  GST REFUND STATEMENT 5 — CUSTOM TEMPLATE BLUEPRINT
+  Refund of Unutilized ITC on Supplies to SEZ without Payment of Tax (SEZWOP)
+  Template File: GST_Refund_Stmt5_Template.xlsx
+  For App Developer Reference
+================================================================================
+
+================================================================================
+1. TEMPLATE IDENTITY
+================================================================================
+
+Template File        : GST_Refund_Stmt5_Template.xlsx
+Refund Code          : SEZWOP
+JSON Version         : 2.0
+JSON Statement Key   : stmt05
+Legal Basis          : Section 54(3) CGST Act, Rule 89(2)(d), Rule 89(2)(e)
+Refund Category      : Accumulated ITC (no output tax paid — zero-rated SEZ supply)
+
+Sheets:
+  1. Overview     — Metadata and colour coding legend
+  2. Header       — GSTIN, From Period (MM-YYYY), To Period (MM-YYYY)
+  3. Goods        — Supply of goods to SEZ (6 columns, data from row 2)
+  4. Services     — Supply of services to SEZ (6 columns, data from row 2)
+  5. Help         — Field specs, key differences, validation rules, tool usage
+
+Row 1 = Column headers (colour-coded: blue=mandatory, green=optional, light blue=conditional)
+Data starts at row 2 — no gap row
+
+The G/S flag is implicit in the sheet name:
+  Goods sheet = "G" in JSON
+  Services sheet = "S" in JSON
+
+THIS IS THE LIGHTEST TEMPLATE — only 6 columns per data sheet. No tax
+amount columns. No BRC/FIRC block. No Port Code / FOB / EGM fields.
+
+================================================================================
+2. HEADER SHEET — Reading Logic
+================================================================================
+
+Cell Mapping:
+  A2 = "GSTIN"           → B2 = value  → JSON key: "gstin"
+  A3 = "From Period (MM-YYYY)" → B3 = value  → JSON key: "fromFp"
+  A4 = "To Period (MM-YYYY)"   → B4 = value  → JSON key: "toFp"
+
+Hardcoded by app:
+  "refundRsn": "SEZWOP"
+  "version": "2.0"
+
+IMPORTANT — RETURN PERIODS ARE REQUIRED:
+  Unlike S02/S04 (v3.0), S05 is still v2.0. From/To Return Periods ARE
+  validated and included in JSON output.
+
+Validations:
+  GSTIN  → Standard GSTIN regex. Auto upper-case and trim.
+  From   → Format MM-YYYY (e.g., 07-2024). App strips hyphen → JSON "fromFp": "072024".
+           Must be >= 07-2017, <= current, <= To Period.
+  To     → Format MM-YYYY (e.g., 09-2024). App strips hyphen → JSON "toFp": "092024".
+           Must be >= 07-2017, <= current, >= From Period.
+
+================================================================================
+3. GOODS SHEET — Column Specification
+================================================================================
+
+Col | Header                     | JSON Key | Type          | Mandatory | Notes
+----|----------------------------|----------|---------------|-----------|-------------------
+A   | Doc Type                   | docType  | Text          | Required  | Dropdown: Invoice, Debit Note, Credit Note
+B   | Doc No                     | inum     | Text (16)     | Required  | Alphanumeric + / and -
+C   | Doc Date                   | idt      | DD-MM-YYYY    | Required  | >= 01-07-2017, <= current, <= To Period
+D   | Doc Value                  | val      | Number (15,2) | Required  | >= 0
+E   | SB / Endorsed Invoice No   | sbnum    | Text          | Optional  | Omitted from JSON if blank
+F   | SB / Endorsed Invoice Date | sbdt     | DD-MM-YYYY    | Conditional| Required if Col E provided; <= current
+
+Data starts at row 2.
+JSON type flag: app emits "type": "G" for all Goods sheet rows.
+
+================================================================================
+4. SERVICES SHEET — Column Specification
+================================================================================
+
+Col | Header                     | JSON Key | Type          | Mandatory | Notes
+----|----------------------------|----------|---------------|-----------|-------------------
+A   | Doc Type                   | docType  | Text          | Required  | Dropdown: Invoice, Debit Note, Credit Note
+B   | Doc No                     | inum     | Text (16)     | Required  | Alphanumeric + / and -
+C   | Doc Date                   | idt      | DD-MM-YYYY    | Required  | >= 01-07-2017, <= current, <= To Period
+D   | Doc Value                  | val      | Number (15,2) | Required  | >= 0
+E   | SB / Endorsed Invoice No   | sbnum    | Text          | Optional  | Omitted from JSON if blank
+F   | SB / Endorsed Invoice Date | sbdt     | DD-MM-YYYY    | Conditional| Required if Col E provided; <= current
+
+Data starts at row 2.
+JSON type flag: app emits "type": "S" for all Services sheet rows.
+
+NOTE: Goods and Services sheets have IDENTICAL column structures. The only
+difference is the "type" value in JSON ("G" vs "S"). The split exists because
+S05 follows the same sheet-as-type design principle as S03.
+
+================================================================================
+5. KEY DIFFERENCES FROM S03 (EXPORTS WITHOUT PAYMENT)
+================================================================================
+
+Both S03 and S05 are "without payment of tax" → Accumulated ITC refund.
+Both use Goods/Services sheet split. But they are very different:
+
+| Feature              | S03 (Exports)           | S05 (SEZ)              |
+|----------------------|-------------------------|------------------------|
+| Columns per sheet    | 14 (Goods), 8 (Svc)    | 6 (both identical)     |
+| Port Code            | Required for Goods      | Not present            |
+| Shipping Bill        | Required for Goods      | Optional for both      |
+| FOB Value            | Required for Goods      | Not present            |
+| EGM Reference        | Present for Goods       | Not present            |
+| BRC/FIRC             | Optional Goods, Mand Svc| Not present at all     |
+| BRC Group ID         | Present                 | Not present            |
+| Tax amount columns   | None                    | None                   |
+| Return Periods       | Yes (v3.0)              | Yes (v2.0)             |
+
+S05 is simpler because SEZ supplies have endorsed invoice evidence rather
+than customs/banking evidence chains.
+
+================================================================================
+6. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "[from Header B2]",
+  "fromFp": "[from Header B3]",
+  "toFp": "[from Header B4]",
+  "refundRsn": "SEZWOP",
+  "version": "2.0",
+  "stmt05": [ ...array of nodes... ]
+}
+
+JSON NODE — TWO PATHS based on sbnum presence:
+
+Path 1: SB / Endorsed Invoice provided:
+{
+  "sno": [auto], "docType": "...", "inum": "...", "idt": "...",
+  "val": ..., "type": "G", "sbnum": "...", "sbdt": "..."
+}
+
+Path 2: SB / Endorsed Invoice blank:
+{
+  "sno": [auto], "docType": "...", "inum": "...", "idt": "...",
+  "val": ..., "type": "S"
+}
+
+CRITICAL: When sbnum and sbdt are blank, they are OMITTED from JSON entirely
+(not defaulted to empty string). The "type" value always closes the JSON node.
+
+The government VBA appends a trailing quote after the type value:
+  "type":"G","sbnum":"..." or "type":"S"}
+This is a VBA string construction quirk — your app should produce clean JSON.
+
+SERIAL NUMBER:
+  Auto-generated by app across both sheets. Government VBA uses
+  autoGenSerial() — numbers only rows where Doc Type is not blank.
+  Goods rows numbered first, then Services rows continue the sequence.
+
+================================================================================
+7. REGEX PATTERNS FOR APP VALIDATION
+================================================================================
+
+GSTIN_REGEX      = ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$
+INV_DATE_REGEX   = ^[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$
+RET_PRD_REGEX    = ^[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$  (input: MM-YYYY)
+                       App strips hyphen → validates ^[0-1][0-9][0-9]{4}$ for JSON
+INVOICE_REGEX    = ^[a-zA-Z0-9\/-]{0,16}$
+AMT_REGEX        = ^([0-9]{0,15})([.][0-9]{0,2})?$
+SHP_REGEX        = ^[a-zA-Z0-9\/-]+$
+
+NOTE: S05 SHP_REGEX is different from S03's SHP_REGEX.
+  S03: ^[0-9]{3,7}$ (3-7 digits only — customs shipping bill)
+  S05: ^[a-zA-Z0-9\/-]+$ (alphanumeric + / and - — endorsed invoice)
+This is because S05 shipping bill / endorsed invoice numbers can contain
+letters (SEZ endorsement numbers are not customs-format).
+
+================================================================================
+8. APP PROCESSING FLOW
+================================================================================
+
+1. Read Header sheet → extract GSTIN, fromFp, toFp
+2. Validate header fields (regex, period range checks)
+3. Read Goods sheet from row 2 → skip empty rows
+4. For each goods row:
+   a. Validate Doc Type (Invoice/Debit Note/Credit Note)
+   b. Validate Doc No, Doc Date, Doc Value
+   c. If SB No provided → validate SB Date (must be present, <= current)
+   d. Check for duplicates
+   e. Build JSON node with type="G"
+5. Read Services sheet from row 2 → skip empty rows
+6. For each services row:
+   a. Same validations as goods
+   b. Build JSON node with type="S"
+7. If any errors → report all, do NOT generate JSON
+8. If zero errors → assemble JSON envelope, write to file
+
+================================================================================
+9. THINGS TO WATCH OUT FOR (APP DEVELOPER NOTES)
+================================================================================
+
+1. RETURN PERIODS ARE REQUIRED — S05 is v2.0. Unlike S02/S04 (v3.0), the
+   fromFp and toFp keys ARE included in JSON. Don't skip them.
+
+2. NO TAX COLUMNS — S05 has zero tax amount fields (no IGST, CGST, SGST,
+   Cess). The refund is accumulated ITC — there's no tax paid on the supply.
+
+3. NO BRC/FIRC — Unlike S03 (exports without payment), S05 has no BRC/FIRC
+   evidence block at all. No BRC linking logic needed.
+
+4. IDENTICAL GOODS AND SERVICES SHEETS — Same 6 columns in both. The split
+   exists only for the "type" flag in JSON. The app can use the same
+   validation function for both sheets, just passing "G" or "S".
+
+5. SHP_REGEX IS DIFFERENT FROM S03 — S05 allows alphanumeric + /- for
+   shipping bill / endorsed invoice numbers (not just 3-7 digits). This is
+   because SEZ endorsed invoices have different number formats than customs
+   shipping bills.
+
+6. SB DATE CONDITIONAL — Same as S04: required only when SB No is provided.
+   Cannot be future. No lower bound (can pre-date 01-07-2017 per govt VBA
+   — the check for SB Date being before start date is commented out).
+
+7. OMIT BLANK SB FIELDS — When sbnum and sbdt are blank, omit both keys
+   from JSON entirely. Do not include empty strings.
+
+8. DUPLICATE KEY — DocType suffix (last 4 chars) + "_" + DocNo + "_" + FY.
+   Same FY adjustment for Jan-Mar. Checked independently for Goods and
+   Services (uses DUPLICATE_REC1 dictionary in govt VBA).
+
+9. SERIAL NUMBERING ACROSS SHEETS — Same as S03: sno is sequential across
+   both Goods and Services. If Goods has 15 rows, Services sno starts at 16.
+
+10. NO DOC VALUE vs TAXABLE VALUE DISTINCTION — S05 has only "Doc Value"
+    (mapped to "val" in JSON). There is no separate Taxable Value column.
+    This is because there's no tax component to split out — the supply is
+    without payment of tax.
+
+================================================================================
+  END OF S05 CUSTOM TEMPLATE BLUEPRINT
+================================================================================

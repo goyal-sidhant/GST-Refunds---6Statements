@@ -1,0 +1,255 @@
+================================================================================
+  GST REFUND STATEMENT 3 — CUSTOM TEMPLATE BLUEPRINT
+  Refund of Unutilized ITC on Exports without Payment of Tax (EXPWOP)
+  Template File: GST_Refund_Stmt3_Template.xlsx
+  For App Developer Reference
+================================================================================
+
+================================================================================
+1. TEMPLATE IDENTITY
+================================================================================
+
+Template File        : GST_Refund_Stmt3_Template.xlsx
+Refund Code          : EXPWOP
+JSON Version         : 3.0
+JSON Statement Key   : stmt03
+Legal Basis          : Section 54(3) CGST Act, Rule 89(2)(b), Rule 89(2)(c), Rule 89(4)
+Refund Category      : Accumulated ITC (no output tax paid — zero-rated exports)
+
+Sheets:
+  1. Overview     — Metadata and colour coding legend
+  2. Header       — GSTIN, Legal Name, From Period (MM-YYYY), To Period (MM-YYYY)
+  3. Goods        — Export of goods (14 columns, data from row 2)
+  4. Services     — Export of services (8 columns, data from row 2)
+  5. Help         — Field specs, BRC linking modes, validation rules, tool usage
+
+Row 1 = Column headers (colour-coded: blue=mandatory, green=optional, light blue=conditional)
+Data starts at row 2 — no gap row
+
+The G/S flag is implicit in the sheet name:
+  Goods sheet = "G" in JSON
+  Services sheet = "S" in JSON
+
+================================================================================
+2. HEADER SHEET — Reading Logic
+================================================================================
+
+Cell Mapping:
+  A2 = "GSTIN"           → B2 = value  → JSON key: "gstin"
+  A3 = "Legal Name"       → B3 = value  → NOT in JSON (reference only)
+  A4 = "From Period (MM-YYYY)" → B4 = value  → JSON key: "fromFp"
+  A5 = "To Period (MM-YYYY)"   → B5 = value  → JSON key: "toFp"
+
+Hardcoded by app:
+  "refundRsn": "EXPWOP"
+  "version": "3.0"
+
+Validations:
+  GSTIN      → Standard GSTIN regex. Auto upper-case and trim.
+  Legal Name → No validation (optional, reference only).
+  From       → Format MM-YYYY (e.g., 01-2025). App strips hyphen → JSON "fromFp": "012025".
+             Must be >= 07-2017, <= current, <= To Period.
+  To         → Format MM-YYYY (e.g., 03-2025). App strips hyphen → JSON "toFp": "032025".
+             Must be >= 07-2017, <= current, >= From Period.
+
+================================================================================
+3. GOODS SHEET — Column Specification
+================================================================================
+
+Col | Header         | JSON Key    | Type          | Mandatory   | Notes
+----|----------------|-------------|---------------|-------------|-------------------
+A   | Doc Type       | docType     | Text          | Required    | Dropdown: Invoice, Debit Note, Credit Note
+B   | Doc No         | inum        | Text (16)     | Required    | Alphanumeric + / and -
+C   | Doc Date       | idt         | DD-MM-YYYY    | Required    | >= 01-07-2017, <= current, <= To Period
+D   | Doc Value      | val         | Number (15,2) | Required    | >= 0
+E   | Port Code      | sbpcode     | Text (6)      | Required    | Exactly 6 alphanumeric. Example: INBOM4
+F   | SB No          | sbnum       | Text (3-7)    | Required    | 3-7 digits only
+G   | SB Date        | sbdt        | DD-MM-YYYY    | Required    | Cannot be future
+H   | FOB Value      | fobValue    | Number (15,4) | Required    | 4 DECIMAL PLACES (not 2!)
+I   | EGM Ref No     | egmref      | Text (1-20)   | Conditional | 1-20 alphanumeric
+J   | EGM Date       | egmrefdt    | DD-MM-YYYY    | Conditional | Can pre-date 01-07-2017
+K   | BRC No         | brcfircnum  | Text (2-30)   | Optional    | For goods, BRC is optional
+L   | BRC Date       | brcfircdt   | DD-MM-YYYY    | Optional    | Can pre-date 01-07-2017
+M   | BRC Value      | brcfircval  | Number (15,2) | Optional    | >= 0 if provided
+N   | BRC Group ID   | (not in JSON)| Text          | Optional    | For --brc-mode group only
+
+Data starts at row 2.
+
+APP MUST HANDLE THREE PATHS FOR GOODS:
+  Path 1: Goods row with shipping, NO BRC → emit customs keys only
+  Path 2: Goods row with shipping AND BRC → emit customs keys + BRC JSON node
+  Path 3: BRC-only row (no Doc Type, just BRC cols) → emit BRC-only JSON node
+
+JSON type flag: app emits "type": "G" for all Goods sheet rows.
+
+================================================================================
+4. SERVICES SHEET — Column Specification
+================================================================================
+
+Col | Header         | JSON Key    | Type          | Mandatory   | Notes
+----|----------------|-------------|---------------|-------------|-------------------
+A   | Doc Type       | docType     | Text          | Required    | Dropdown: Invoice, Debit Note, Credit Note
+B   | Doc No         | inum        | Text (16)     | Required    | Alphanumeric + / and -
+C   | Doc Date       | idt         | DD-MM-YYYY    | Required    | >= 01-07-2017, <= current, <= To Period
+D   | Doc Value      | val         | Number (15,2) | Required    | >= 0
+E   | BRC No         | brcfircnum  | Text (2-30)   | Conditional | Mandatory for services — refund after payment
+F   | BRC Date       | brcfircdt   | DD-MM-YYYY    | Conditional | Can pre-date 01-07-2017
+G   | BRC Value      | brcfircval  | Number (15,2) | Conditional | >= 0
+H   | BRC Group ID   | (not in JSON)| Text          | Optional    | For --brc-mode group only
+
+Data starts at row 2.
+
+SERVICES HAVE NO SHIPPING/CUSTOMS FIELDS — no Port Code, SB No, SB Date,
+FOB Value, EGM Ref, EGM Date. These are only on the Goods sheet.
+
+JSON type flag: app emits "type": "S" for all Services sheet rows.
+
+BRC IS MANDATORY FOR SERVICES — every service invoice must be covered by
+at least one BRC, either on the same row or via Adjacent/Group linking.
+
+================================================================================
+5. BRC/FIRC LINKING LOGIC
+================================================================================
+
+MODE 1: ADJACENT (Default — python main.py input.xlsx)
+  BRC on a row covers all invoices above it until the previous BRC row.
+  Applies to both Goods and Services sheets.
+
+  Row types:
+    Doc + BRC → invoice JSON chunk + BRC JSON chunk (two nodes)
+    Doc only  → invoice JSON chunk only
+    BRC only  → BRC JSON chunk only (sno + brcfircnum + brcfircdt + brcfircval)
+
+MODE 2: GROUP ID (python main.py input.xlsx --brc-mode group)
+  Use BRC Group ID column to explicitly tag invoices.
+  The BRC row with the same Group ID covers all tagged invoices.
+  VALIDATION: In group mode, a service invoice with no BRC and no Group ID → ERROR.
+
+IMPORTANT — BRC DATE EXCEPTION:
+  BRC/FIRC and EGM dates CAN be before 01-07-2017.
+  Document dates (Doc Date, SB Date) must be >= 01-07-2017.
+
+================================================================================
+6. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "[from Header B2]",
+  "fromFp": "[from Header B4]",
+  "toFp": "[from Header B5]",
+  "refundRsn": "EXPWOP",
+  "version": "3.0",
+  "stmt03": [ ...array of nodes... ]
+}
+
+GOODS DOCUMENT NODE (with shipping, no BRC):
+{
+  "sno": [auto], "docType": "...", "inum": "...", "idt": "...",
+  "val": ..., "type": "G", "sbpcode": "...", "sbnum": "...",
+  "sbdt": "...", "fobValue": ..., "egmref": "...", "egmrefdt": "..."
+}
+
+SERVICES DOCUMENT NODE (no shipping):
+{
+  "sno": [auto], "docType": "...", "inum": "...", "idt": "...",
+  "val": ..., "type": "S"
+}
+
+BRC-ONLY NODE:
+{
+  "sno": [auto], "brcfircnum": "...", "brcfircdt": "...", "brcfircval": ...
+}
+
+COMBINED ROW (Doc + BRC):
+  Two JSON chunks emitted — invoice portion + BRC portion.
+  For Goods: invoice includes shipping keys. For Services: no shipping keys.
+
+SERIAL NUMBER:
+  Auto-generated by app. Assigned to every non-empty row across both sheets.
+  Goods rows numbered first, then Services rows continue the sequence.
+
+================================================================================
+7. REGEX PATTERNS FOR APP VALIDATION
+================================================================================
+
+GSTIN_REGEX      = ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$
+INV_DATE_REGEX   = ^[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$
+RET_PRD_REGEX    = ^[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$  (input: MM-YYYY)
+                       App strips hyphen → validates ^[0-1][0-9][0-9]{4}$ for JSON
+INVOICE_REGEX    = ^[a-zA-Z0-9\/-]{0,16}$
+AMT_REGEX        = ^([0-9]{0,15})([.][0-9]{0,2})?$
+FOB_VALUE_REGEX  = ^([0-9]{0,15})([.][0-9]{0,4})?$
+PORT_CODE_REGEX  = ^[a-zA-Z0-9]{6}$
+SHP_REGEX        = ^[0-9]{3,7}$
+EGM_NO_REGEX     = ^[a-zA-Z0-9]{1,20}$
+BRC_NO_REGEX     = ^[a-zA-Z0-9]{2,30}$
+BRC_VAL_REGEX    = ^([0-9]{0,15})([.][0-9]{0,2})?$
+
+================================================================================
+8. APP PROCESSING FLOW
+================================================================================
+
+1. Read Header sheet → extract GSTIN, fromFp, toFp (+ Legal Name for display)
+2. Validate header fields
+3. Read Goods sheet from row 2 → skip empty rows
+4. For each goods row:
+   a. Validate Doc Type, Doc No, Doc Date, Doc Value
+   b. Validate Port Code (required, 6 chars)
+   c. Validate SB No (required, 3-7 digits), SB Date
+   d. Validate FOB Value (15+4 decimals!)
+   e. Validate EGM fields if present
+   f. Validate BRC fields if present (optional for goods)
+   g. Check for duplicates
+   h. Build JSON node(s) with type="G"
+5. Read Services sheet from row 2 → skip empty rows
+6. For each services row:
+   a. Validate Doc Type, Doc No, Doc Date, Doc Value
+   b. Validate BRC fields (mandatory for services)
+   c. Check BRC coverage (adjacent or group mode)
+   d. Check for duplicates
+   e. Build JSON node(s) with type="S"
+7. If any errors → report all, do NOT generate JSON
+8. If zero errors → assemble JSON envelope, write to file
+
+================================================================================
+9. THINGS TO WATCH OUT FOR (APP DEVELOPER NOTES)
+================================================================================
+
+1. FOB VALUE IS 4 DECIMALS — This is the only field across all 6 statements
+   that allows 4 decimal places instead of 2. FOB_VALUE_REGEX enforces this.
+   Do NOT use the standard AMT_REGEX for FOB.
+
+2. LEGAL NAME IS NOT IN JSON — Header row 3 (Legal Name) is for the user's
+   reference only. Do not include it in JSON output.
+
+3. G/S FLAG IS THE SHEET NAME — The app emits "type": "G" for Goods rows
+   and "type": "S" for Services rows. No column in the template stores this.
+
+4. BRC OPTIONAL FOR GOODS, MANDATORY FOR SERVICES — If a service invoice
+   has no BRC coverage (neither on-row nor via adjacent/group linking),
+   that's a validation error. For goods, missing BRC is fine.
+
+5. EGM AND BRC DATES CAN PRE-DATE GST — Unlike Doc Date and SB Date which
+   must be >= 01-07-2017, EGM Date and BRC Date have no minimum restriction.
+
+6. DUPLICATE KEY — DocType suffix (last 4 chars) + "_" + DocNo + "_" + FY.
+   Same FY adjustment for Jan-Mar. Checked independently for Goods and Services.
+
+7. SB DATE CANNOT BE FUTURE — Shipping Bill Date <= current date. The govt
+   VBA checks this. No lower bound on SB Date though (unlike Doc Date).
+
+8. SERIAL NUMBERING ACROSS SHEETS — sno is sequential across both Goods and
+   Services. If Goods has 20 rows, Services sno starts at 21. The govt VBA
+   uses a single autoGenSerial across the entire dataset.
+
+9. BRC-ONLY ROWS — A row with no Doc Type but with BRC data is valid. It
+   generates a BRC-only JSON node. This supports multiple BRCs per invoice.
+
+10. GROUP MODE EDGE CASE — In --brc-mode group, a service invoice with no
+    BRC and no Group ID must be flagged as error. A goods invoice in the same
+    situation is fine (BRC is optional for goods).
+
+================================================================================
+  END OF S03 CUSTOM TEMPLATE BLUEPRINT
+================================================================================

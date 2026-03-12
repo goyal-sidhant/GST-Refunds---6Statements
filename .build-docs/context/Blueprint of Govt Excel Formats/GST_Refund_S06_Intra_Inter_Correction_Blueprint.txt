@@ -1,0 +1,2779 @@
+================================================================================
+  GST REFUND STATEMENT 06 — HOLISTIC REFERENCE
+  Refund — Tax Paid on Intra-State Supply Held to be Inter-State & Vice Versa
+  (Change of Place of Supply — INTRVC)
+  Source: GST_REFUND_S06.xlsb + VBA Code + Format Guide
+================================================================================
+
+================================================================================
+1. UTILITY IDENTITY
+================================================================================
+
+File Name                : GST_REFUND_S06.xlsb
+Sheet Name               : RFD_STMT06
+Statement Name (JSON)    : stmt06
+Refund Reason Code       : INTRVC
+Version                  : 2.0
+Data Range               : A13:V(last row) — max 10,000 rows
+VBA Author               : Kayalvizhi
+Sheet Protection Password: aN*4r!U5
+Tutorial Link            : https://tutorial.gst.gov.in/userguide/refund/File_reply_manual.htm
+                           (S06 is surfaced through the refund file-reply manual landing page)
+
+================================================================================
+2. PURPOSE & LEGAL BASIS
+================================================================================
+
+This template covers Section 77 / Section 19 situations where tax was paid
+treating a supply as intra-State (or inter-State), but later it is held to be
+the opposite due to correction/change in Place of Supply.
+
+Each row is a COMPARISON ROW:
+  "How it was taxed earlier" vs. "How it should be taxed now"
+
+This is the WIDEST template (22 columns, A through V) and is:
+  - Evidence-heavy and classification-heavy
+  - NOT export-evidence-heavy (no Port Code / Shipping Bill / BRC)
+  - Unique in requiring B2B vs B2C recipient identification
+  - Unique in having "Earlier" vs "Correct" paired blocks
+
+REFUND CATEGORY: Correction/Reclassification — neither purely tax-paid nor
+purely ITC-based. The refund arises from the difference between tax paid
+under wrong classification and tax correctly payable.
+
+================================================================================
+3. TOP-SECTION INPUTS
+================================================================================
+
+Field       | Cell       | Mandatory | Validation
+------------|------------|-----------|-------------------------------------------
+GSTIN       | C4 / E6    | Yes       | Standard GSTIN regex
+Order No.   | (varies)   | Yes       | Order/ruling reference number
+Order Date  | (varies)   | Yes       | Date of the order/ruling
+
+================================================================================
+4. ROW-WISE COLUMN LAYOUT (A:V)
+================================================================================
+
+--- RECIPIENT IDENTIFICATION BLOCK (Columns A–D) ---
+
+Col | Field                  | Notes
+----|------------------------|----------------------------------------------
+A   | Sr. No.                | Positive integer
+B   | Recipient Category     | B2B / B2C / Clear
+    |                        |   Drives C vs D lock/unlock (see Section 5)
+C   | Recipient GSTIN/UIN    | Enabled for B2B; LOCKED ("Disabled") for B2C
+D   | Name (B2C)             | Enabled for B2C; LOCKED ("Disabled") for B2B
+
+--- INVOICE BLOCK (Columns E–I) ---
+
+Col | Field                  | Notes
+----|------------------------|----------------------------------------------
+E   | Type of Document       | Invoice / Debit Note / Credit Note
+F   | Document No.           | Max 16 alphanumeric + /-
+G   | Document Date          | dd-mm-yyyy; standard date validations
+H   | Document Value         | Numeric, >= 0
+I   | Taxable Value          | Numeric, >= 0
+
+--- EARLIER CLASSIFICATION BLOCK (Columns J–O) ---
+     "How the transaction was originally treated"
+
+Col | Field                      | Notes
+----|----------------------------|------------------------------------------
+J   | Earlier Classification     | Inter / Intra
+    |                            |   Drives K vs L-M lock/unlock (see Sec 6)
+K   | Earlier IGST               | Enabled if Earlier = Inter; locked if Intra
+L   | Earlier CGST               | Enabled if Earlier = Intra; locked if Inter
+M   | Earlier SGST/UTGST         | Same logic as CGST
+N   | Earlier Cess               | Optional
+O   | Earlier Place of Supply    | State/UT code from dropdown master list
+
+--- CORRECT CLASSIFICATION BLOCK (Columns P–U) ---
+     "How the same transaction should now be treated"
+
+Col | Field                      | Notes
+----|----------------------------|------------------------------------------
+P   | Correct Classification     | Inter / Intra (must differ from Col J)
+Q   | Correct IGST               | Enabled if Correct = Inter
+R   | Correct CGST               | Enabled if Correct = Intra
+S   | Correct SGST/UTGST         | Same logic as CGST
+T   | Correct Cess               | Optional
+U   | Correct Place of Supply    | State/UT code from dropdown master list
+
+--- ERROR COLUMN ---
+
+Col | Field                      | Notes
+----|----------------------------|------------------------------------------
+V   | Error                      | Auto-populated by VBA — do NOT type manually
+
+================================================================================
+5. B2B vs B2C LOCK/UNLOCK (VBA BEHAVIOUR)
+================================================================================
+
+WHEN "B2C" IS SELECTED (Column B):
+  - Col C (GSTIN/UIN) is LOCKED.
+    Display: "Disabled" in grey (ColorIndex = 15, Font.ColorIndex = 15).
+  - Col D (Name) is UNLOCKED for free-text entry.
+    Display: white background, black font.
+
+WHEN "B2B" IS SELECTED (Column B):
+  - Col D (Name) is LOCKED.
+    Display: "Disabled" in grey.
+  - Col C (GSTIN/UIN) is UNLOCKED for GSTIN entry.
+    Display: white background, black font.
+
+WHEN "CLEAR" IS SELECTED (Column B):
+  - All running total cells in row 8 (K through U) are CLEARED and RESET.
+  - Background reset to accent colour (ColorIndex = 17).
+
+================================================================================
+6. INTER/INTRA TAX LOCK LOGIC
+================================================================================
+
+This logic applies INDEPENDENTLY to BOTH the Earlier block and the Correct block:
+
+WHEN "INTER" IS SELECTED:
+  - IGST field: ENABLED (editable)
+  - CGST field: LOCKED (disabled)
+  - SGST field: LOCKED (disabled)
+
+WHEN "INTRA" IS SELECTED:
+  - IGST field: LOCKED (disabled)
+  - CGST field: ENABLED (editable)
+  - SGST field: ENABLED (editable)
+
+The VBA dynamically enables/disables the tax columns based on Inter/Intra
+selection for both the "before" (J) and "after" (P) classification blocks.
+
+IMPORTANT: The Earlier and Correct classifications must be OPPOSITE to each
+other — if Earlier is Inter, Correct must be Intra, and vice versa. This is
+the whole basis of the refund claim.
+
+================================================================================
+7. VALIDATION RULES
+================================================================================
+
+RECIPIENT:
+  - If B2B: GSTIN/UIN must be valid and present.
+  - If B2C: Name must be provided.
+
+DOCUMENT:
+  - Document type, number, date, and value are mandatory.
+  - Standard date validations (>= 01-Jul-2017, <= current, leap year aware).
+
+TAX AMOUNTS:
+  - Earlier block: If Inter → only IGST; if Intra → only CGST+SGST.
+  - Correct block: Same mutual exclusivity rules.
+  - Cess is optional in both blocks.
+  - All tax amounts must be numeric and >= 0.
+
+PLACE OF SUPPLY:
+  - Must be selected from the State/UT master list dropdown.
+
+DUPLICATE DETECTION:
+  Standard duplicate check on document references.
+
+================================================================================
+8. REGEX VALIDATION PATTERNS
+================================================================================
+
+Same standard set as other utilities:
+  GSTIN_REGEX, INV_DATE_REGEX, RET_PRD_REGEX, INVOICE_REGEX, SI_NO_REGEX,
+  AMT_REGEX — all with the same patterns as documented in S01A.
+
+================================================================================
+9. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "...",
+  "orderNo": "...",
+  "orderDt": "...",
+  "refundRsn": "INTRVC",
+  "version": "2.0",
+  "stmt06": [ { ... }, { ... } ]
+}
+
+PER-ROW JSON KEYS:
+
+JSON Key | Source Col  | Meaning
+---------|------------|------------------------------------------
+sno      | A (Col 1)  | Serial number
+invType  | B (Col 2)  | B2B or B2C
+uin      | C (Col 3)  | Recipient GSTIN/UIN (or blank for B2C)
+docType  | E (Col 5)  | Document type
+inum     | F (Col 6)  | Document number
+idt      | G (Col 7)  | Document date
+val      | H (Col 8)  | Document value
+txVal    | I (Col 9)  | Taxable value
+bInt     | J (Col 10) | Earlier classification (Inter/Intra)
+bCGST    | L (Col 12) | Earlier CGST
+bSGST    | M (Col 13) | Earlier SGST
+bCess    | N (Col 14) | Earlier Cess (OMITTED if blank)
+bPOS     | O (Col 15) | Earlier Place of Supply
+aInt     | P (Col 16) | Correct classification (Inter/Intra)
+aIGST    | Q (Col 17) | Correct IGST
+aCess    | T (Col 20) | Correct Cess (OMITTED if blank)
+aPOS     | U (Col 21) | Correct Place of Supply
+
+JSON CONDITIONAL LOGIC — FOUR PATHS:
+  Path 1: Both bCess (Col 14) and aCess (Col 20) present → all keys emitted.
+  Path 2: Both bCess and aCess blank → bCess and aCess omitted.
+  Path 3: bCess blank, aCess present → bCess omitted, aCess included.
+  Path 4: bCess present, aCess blank → bCess included, aCess omitted.
+
+NOTE ON VBA CODE STRUCTURE:
+  The S06 createJsonFile function has extensive commented-out conditional paths
+  (dozens of nested If/Else blocks for every combination of blank tax fields).
+  The active code uses the four-path approach based solely on bCess/aCess
+  presence. The JSON is built through helper functions (B2BInter, B2BIntra,
+  B2CInter, B2CIntra, B2BIntraUIN) that are selected based on the combination
+  of invType (B2B/B2C) and classification (Inter/Intra).
+
+================================================================================
+10. VBA WORKFLOW (BUTTONS)
+================================================================================
+
+"Validate" button:
+  start → getDataFromSheet → validate("VALID") → Calculate → writeDataToSheet
+  → complete. Shows record count.
+
+"Create File To Upload" button:
+  start → getDataFromSheet → validate("NOTVALID") → checkAndCreateJson →
+  writeDataToSheet → complete.
+  Checks GSTIN + Order No + Order Date error cells.
+  Then autoGenSerial → createJsonFile.
+  Prompts SaveAs dialog and creates .json file.
+
+================================================================================
+11. UNIQUE CHARACTERISTICS OF S06
+================================================================================
+
+1. WIDEST FORMAT: 22 columns (A through V) vs 9 for S05 (the lightest).
+
+2. PAIRED BLOCKS: Only statement with "Earlier" vs "Correct" comparison in
+   a single row — every other statement has a single tax/evidence block.
+
+3. B2B/B2C TOGGLE: Only statement where recipient identification changes
+   dynamically based on B2B vs B2C selection (GSTIN vs Name).
+
+4. INTER/INTRA TOGGLE: Only statement with dynamic tax column lock/unlock
+   based on Inter vs Intra classification — and it happens TWICE per row
+   (once for Earlier, once for Correct).
+
+5. PLACE OF SUPPLY: Only statement with explicit State/UT code POS fields
+   (both Earlier and Correct).
+
+6. NO EXPORT EVIDENCE: No Port Code, Shipping Bill, EGM, BRC/FIRC — this
+   is entirely about domestic classification correction.
+
+================================================================================
+
+================================================================================
+APPENDIX A: GST PORTAL TUTORIAL LINK
+================================================================================
+
+Official Tutorial URL:
+https://tutorial.gst.gov.in/userguide/refund/File_reply_manual.htm
+
+Portal Workflow (summarised from tutorial.gst.gov.in):
+  1. Login to GST Portal → Services → Refunds → Application for Refund
+  2. Select the appropriate refund type from the dropdown
+  3. Select the Tax Period and click CREATE REFUND APPLICATION
+  4. IMPORTANT: All applicable returns (GSTR-1, GSTR-3B) must be filed
+     for the period before refund application can be created
+  5. Download the Offline Utility (.xlsb file) from the portal
+  6. Fill in the data in the Excel template
+  7. Click 'Validate & Calculate' to check for errors
+  8. Rectify any errors shown in the Error column
+  9. Click 'Create File To Upload' to generate the JSON file
+  10. Upload the JSON file on the GST Portal
+  11. Click 'Validate Statement' on the portal
+  12. If invalid documents exist, download error sheet, fix, re-upload
+  13. Once validated, proceed to fill refund computation table
+  14. Select bank account, upload supporting documents
+  15. Save the application (valid for 15 days)
+  16. File with DSC or EVC
+  17. ARN is generated and sent via email/SMS
+
+KEY PORTAL NOTES:
+  - System does NOT validate period of limitation (Section 54(1)).
+    Taxpayer must ensure filing within 2 years from relevant date.
+  - Same invoice cannot be reused in another refund application.
+  - If deficiency memo is issued or application withdrawn, invoices
+    become available for reuse.
+  - Up to 15 supporting documents (5 MB each) can be uploaded.
+  - Nil refund can be filed if no refund is to be claimed for a period.
+
+
+================================================================================
+APPENDIX B: FULL VBA CODE (VERBATIM FROM GOVERNMENT UTILITY)
+================================================================================
+
+================================================================================
+  VBA CODE EXTRACTION
+  Source   : GST_REFUND_S06.xlsb
+  Refund   : Refund of tax paid on intra-state supply which is subsequently held to be an inter-state supply and vice versa 
+  Exported : 2026-03-08 15:18:38
+  Modules  : 6 total (2 with code, 4 empty)
+================================================================================
+
+  TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+    1. ThisWorkbook.cls                         (Document Object (ThisWorkbook / Sheet))
+    2. Sheet1.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+    3. Sheet2.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+    4. Module1.bas                              (Standard Module)
+    5. Sheet3.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+    6. Sheet4.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+--------------------------------------------------------------------------------
+
+
+================================================================================
+  [1] ThisWorkbook.cls
+  Type        : Document Object (ThisWorkbook / Sheet)
+  Stream Path : VBA/ThisWorkbook
+================================================================================
+
+Private Sub Workbook_Open()
+Application.DisplayFullScreen = True
+Application.CommandBars("Full Screen").Visible = False
+
+Dim wSheetName As Worksheet
+For Each wSheetName In Worksheets
+wSheetName.Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+Next wSheetName
+
+End Sub
+
+Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+
+    'Target.Locked = False
+   
+    If Not Intersect(Range("B13:B10012"), Target) Is Nothing Then
+    If (Target.Value = "B2C") Then
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Locked = True
+        Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Interior.ColorIndex = 15
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Value = "Disabled"
+         Worksheets("RFD_STMT06").Cells(Target.Row, 3).Font.ColorIndex = 15
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Locked = False
+            
+      ElseIf (Target.Value = "B2B") Then
+      
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Locked = True
+        Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Interior.ColorIndex = 15
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Value = "Disabled"
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Font.ColorIndex = 15
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Locked = False
+        
+    ElseIf (Target.Value = "Clear") Then
+        Worksheets("RFD_STMT06").Cells(8, "K").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "K").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "K").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "K").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "L").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "L").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "L").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "L").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "M").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "M").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "M").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "M").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "N").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "N").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "N").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "N").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "Q").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "Q").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "Q").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "Q").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "R").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "R").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "R").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "R").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "S").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "S").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "S").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "S").Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(8, "T").Interior.ColorIndex = 17
+        Worksheets("RFD_STMT06").Cells(8, "T").Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(8, "T").Value = ""
+        Worksheets("RFD_STMT06").Cells(8, "T").Locked = False
+        
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 2).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 2).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 2).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 2).Locked = False
+    
+         Worksheets("RFD_STMT06").Cells(Target.Row, 3).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 3).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 4).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 4).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 5).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 5).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 5).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 5).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 6).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 6).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 6).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 6).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 7).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 7).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 7).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 7).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 8).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 8).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 8).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 8).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 9).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 9).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 9).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 9).Locked = False
+        
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 10).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 10).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 10).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 10).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 11).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 11).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 11).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 11).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 12).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 12).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 12).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 12).Locked = False
+        
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 13).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 13).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 13).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 13).Locked = False
+        
+        Worksheets("RFD_STMT06").Cells(Target.Row, 14).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 14).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 14).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 14).Locked = False
+                
+        Worksheets("RFD_STMT06").Cells(Target.Row, 15).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 15).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 15).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 15).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 16).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 16).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 16).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 16).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 17).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 17).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 17).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 17).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 18).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 18).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 18).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 18).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 19).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 19).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 19).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 19).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 20).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 20).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 20).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 20).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 21).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 21).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 21).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 21).Locked = False
+        
+         Worksheets("RFD_STMT06").Cells(Target.Row, 1).Interior.ColorIndex = 2
+        Worksheets("RFD_STMT06").Cells(Target.Row, 1).Font.ColorIndex = 1
+        Worksheets("RFD_STMT06").Cells(Target.Row, 1).Value = ""
+        Worksheets("RFD_STMT06").Cells(Target.Row, 1).Locked = False
+        
+     
+    End If
+    End If
+    
+     If Not Intersect(Range("J13:J10012"), Target) Is Nothing Then '//This will detect any changes in G/S column
+        If (Target.Value = "Inter") Then '//If selected value is Goods
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Locked = True '//Lock BRC/FIRC No. for this row
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True '//make above lock using VBA
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Interior.ColorIndex = 15 '//Change BRC/FIRC no. cell color as Gray for this row
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Font.ColorIndex = 15
+            
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Locked = True
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Interior.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Font.ColorIndex = 15
+            
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Locked = False
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Locked = False
+                
+            Worksheets("RFD_STMT06").Cells(Target.Row, 16).Value = "Intra"
+                
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Locked = True
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Interior.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Font.ColorIndex = 15
+            
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Locked = False
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Locked = False
+            
+          
+                                      
+        ElseIf (Target.Value = "Intra") Then '// Then If selected value is Services
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Locked = True
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Interior.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 11).Font.ColorIndex = 15
+            
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 12).Locked = False
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 13).Locked = False
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 14).Locked = False
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Interior.ColorIndex = 2
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Font.ColorIndex = 1
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Value = ""
+            Worksheets("RFD_STMT06").Cells(Target.Row, 17).Locked = False
+            
+           Worksheets("RFD_STMT06").Cells(Target.Row, 16).Value = "Inter"
+                                 
+            
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Locked = True
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Interior.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 18).Font.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Locked = True
+            Worksheets("RFD_STMT06").Protect Password:="aN*4r!U5", UserInterfaceOnly:=True
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Interior.ColorIndex = 15
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Value = "Disabled"
+            Worksheets("RFD_STMT06").Cells(Target.Row, 19).Font.ColorIndex = 15
+            
+                  
+        End If
+    
+    End If
+
+End Sub
+
+
+================================================================================
+  [2] Module1.bas
+  Type        : Standard Module
+  Stream Path : VBA/Module1
+================================================================================
+
+Option Explicit
+
+Dim WS_DATA As Variant
+Dim STARTROW, ENDROW, LASTROW As Integer
+Dim DUPLICATE_REC As New Scripting.Dictionary
+Dim GSTIN_REGEX, INV_DATE_REGEX, RET_PRD_REGEX, INVOICE_REGEX, AMT_REGEX, INV_REGEX, CUS_NAME_REGEX, ORD_NO_REGEX, UIN_REGEX, FILE_TYPE, DOCVALUE_REGEX, DocType As String
+Dim bIsNumeric, leapYear, isGSTIN, isUIN, checkGSTIN, checkUIN As Boolean
+Dim OBJ_RE As New VBScript_RegExp_55.RegExp
+Dim OBJ_RE1 As New VBScript_RegExp_55.RegExp
+
+Sub FullScreen()
+    Application.DisplayFullScreen = True
+    Application.CommandBars("Full Screen").Visible = False
+End Sub
+
+Sub ExitFullScreen()
+    Application.DisplayFullScreen = False
+End Sub
+Sub CreateJson()
+    
+    start
+    getDataFromSheet
+    
+    validate ("NOTVALID")
+    checkAndCreateJson
+    
+    writeDataToSheet
+    complete
+    
+End Sub
+Sub ValidateJson()
+    
+    start
+    getDataFromSheet
+    
+    validate ("VALID")
+    Calculate
+    
+    writeDataToSheet
+    complete
+    
+End Sub
+Function start()
+    Application.Interactive = False
+    Application.ScreenUpdating = False
+    Application.DisplayStatusBar = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    ActiveSheet.DisplayPageBreaks = False
+    
+    GSTIN_REGEX = "^[0-9]{2}[A-Z]{4}[0-9A-Z]{1}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$"
+    INV_DATE_REGEX = "^[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$"
+    FILE_TYPE = "json"
+    RET_PRD_REGEX = "^[0-1]{1}[0-9]{1}[0-9]{4}$"
+    INVOICE_REGEX = "^[a-zA-Z0-9\/-]{0,16}$"
+    DOCVALUE_REGEX = "^([0-9]{0,15})([.][0-9]{0,2})?$"
+    AMT_REGEX = "^[0-9]{0,15}[.]{0,1}[0-9]{0,2}$"
+    INV_REGEX = "^[0\/-]{0,15}$"
+    CUS_NAME_REGEX = "^[a-zA-Z0-9\_&'\-\.\/\,\}\]\[""()?@!#%$~*;+= ]{1,99}$"
+    ORD_NO_REGEX = "^[a-zA-Z0-9]+$"
+    UIN_REGEX = "[0-9]{4}[A-Z]{3}[0-9]{5}[UO]{1}[N][A-Z0-9]{1}"
+    
+End Function
+
+'Function isLeapYear(Yr As Integer) As Boolean
+    
+' returns FALSE if not Leap Year, TRUE if Leap Year
+    
+    'leapYear = (Month(DateSerial(Yr, 2, 29)) = 2)
+    
+'End Function
+Function getDataFromSheet()
+    Dim currentWS As Worksheet
+    Set currentWS = ActiveSheet
+    Dim lastCell As Range
+    
+    
+    With Sheets("RFD_STMT06")
+        Set lastCell = Range("A13:U10012").Find(What:="*", _
+        After:=.Range("A13"), _
+        Lookat:=xlPart, _
+        LookIn:=xlFormulas, _
+        SearchOrder:=xlByRows, _
+        SearchDirection:=xlPrevious, _
+        MatchCase:=False)
+    End With
+    
+    If lastCell Is Nothing Then
+        LASTROW = 12
+    Else
+        LASTROW = lastCell.Row
+    End If
+    
+    If lastCell Is Nothing Then
+        STARTROW = 0
+        ENDROW = 0
+        WS_DATA = Null
+    Else
+        WS_DATA = currentWS.Range("A13:V" & LASTROW).Value
+        STARTROW = LBound(WS_DATA, 1)
+        ENDROW = UBound(WS_DATA, 1)
+    End If
+    
+    Set currentWS = Nothing
+End Function
+
+Function writeDataToSheet()
+    
+    Range("A13:V" & LASTROW).Value = WS_DATA
+    
+'To Adjust COlumn I (Errors) height such that error messages are completely visible.
+    Columns("V:V").AutoFit
+    
+'Select the cells which are below the last row containing value in coulmn A. Clear those selcted cells.
+    Range(Cells(LASTROW + 1, "V"), Cells(LASTROW + 1, "V").End(xlDown)).ClearContents
+    
+    
+End Function
+
+Function complete()
+    
+    Application.Interactive = True
+    Application.ScreenUpdating = True
+    Application.DisplayStatusBar = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    ActiveSheet.DisplayPageBreaks = False
+End Function
+
+Function validate(msgFlag As Variant)
+    On Error GoTo ERR_HANDLER
+    OBJ_RE.Global = True
+    OBJ_RE.IgnoreCase = False
+    
+    Dim totalRow, addCount, deleteCount, rowNo, inv_day, inv_month, inv_year, ord_day, ord_month, ord_year As Integer
+    Dim key As String
+    Dim invoiceDate, StartDate, CurrentDate, FromDate, ToDate, OrderDate As Date
+    Dim FromYear, FromMonth, Fromday, ToYear, ToMonth, Today, userDate As Long
+    Dim FromRetPer, ToRetPer As String
+    Dim MantissaMax, DecimalMax, pos As Integer
+    Dim total_inv_month, total_inv_year As Integer
+    Dim bIGST, bCGST, bSGST, bCess, aIGST, aCGST, aSGST, aCess As Double
+    
+    bIsNumeric = True
+    leapYear = False
+    isGSTIN = False
+    isUIN = False
+    MantissaMax = 15
+    DecimalMax = 2
+    
+    addCount = 0
+    deleteCount = 0
+    bIGST = 0
+    bCGST = 0
+    bSGST = 0
+    bCess = 0
+    aIGST = 0
+    aCGST = 0
+    aSGST = 0
+    aCess = 0
+        
+     StartDate = CDate(Format("2017-07-01", "yyyy-mm-dd"))
+    'CurrentDate = CDate(Format(Date, "mm-dd-yyyy"))
+    CurrentDate = CDate(Format(Now(), "yyyy-mm-dd"))
+    
+'Check the regex pattern of the GSTIN
+    OBJ_RE.Pattern = GSTIN_REGEX
+    
+    Cells(5, "C") = ""
+    Cells(5, "B") = UCase(Cells(5, "B"))
+    Cells(5, "B") = Trim(Cells(5, "B"))
+    If Not OBJ_RE.Test(Cells(5, "B")) Then Cells(5, "C") = "GSTIN is not available/incorrect."
+    
+    If Cells(5, "B") = "" Then Cells(5, "C") = "Mandatory Field"
+    
+    
+'checks for valid values
+    Cells(6, "J") = ""
+    If Cells(6, "I") = "" Then Cells(6, "J") = "Mandatory Field"
+    Cells(6, "I") = UCase(Cells(6, "I"))
+        OBJ_RE.Pattern = ORD_NO_REGEX
+        If Not OBJ_RE.Test(Cells(6, "I")) Then
+            Cells(6, "J") = "Please enter valid order number"
+             GoTo SKIP_1
+        End If
+    
+    
+'Spaces in date field are trimmed and if "/" delimiter is used it is replaced to "-"
+    Cells(6, "M") = ""
+    If Cells(6, "L") = "" Then Cells(6, "M") = "Mandatory Field"
+        Cells(6, "L") = Trim(Cells(6, "L"))
+        Cells(6, "L") = Replace(Cells(6, "L"), "/", "-")
+        
+        If Not (Cells(6, "L") = "") Then
+        OBJ_RE.Pattern = INV_DATE_REGEX
+        
+        If Not OBJ_RE.Test(Cells(6, "L")) Then
+            Cells(6, "M") = "Please enter order date in dd-mm-yyyy format."
+             GoTo SKIP_1
+        End If
+       
+        OBJ_RE.Pattern = INV_DATE_REGEX
+        ord_day = Left(Cells(6, "L"), 2)
+        ord_month = Mid(Cells(6, "L"), 4, 2)
+        ord_year = Mid(Cells(6, "L"), 7, 4)
+        'total_inv_month = Mid(Cells(6, "K"), 4, 2)
+        'total_inv_year = Mid(Cells(6, "K"), 7, 4)
+        
+        OrderDate = DateSerial(ord_year, ord_month, ord_day)
+        
+        If ord_year < 2017 Then
+            Cells(6, "M") = "Order Date cannot be earlier than 01-Jul-2017 or Enter valid Date"
+             GoTo SKIP_1
+        End If
+        
+        If ord_month > 12 Then
+            Cells(6, "M") = "Order Date cannot be earlier than 01-Jul-2017 or Enter valid Date"
+             GoTo SKIP_1
+        End If
+        
+        If ord_month < 1 Then
+            Cells(6, "M") = "Order Date cannot be earlier than 01-Jul-2017 or Enter valid Date"
+             GoTo SKIP_1
+        End If
+        
+        If ord_day < 1 Then
+            Cells(6, "M") = "Order Date cannot be earlier than 01-Jul-2017 or Enter valid Date"
+            GoTo SKIP_1
+        End If
+        
+        If (ord_month = 2) Then
+            'leapYear = isLeapYear(ord_year)
+            leapYear = (Month(DateSerial(ord_year, 2, 29)) = 2)
+            If (leapYear = True) Then
+                If (ord_day > 29) Then
+                    Cells(6, "M") = "Please enter valid date for Order"
+                     GoTo SKIP_1
+                End If
+            Else
+                If (ord_day > 28) Then
+                    Cells(6, "M") = "Please enter valid date for Order"
+                     GoTo SKIP_1
+                End If
+            End If
+        End If
+        
+        
+        Select Case inv_month
+        Case 1, 3, 5, 7, 8, 10, 12
+            If ord_day > 31 Then
+                Cells(6, "M") = "Please enter valid date for Order"
+                 GoTo SKIP_1
+            End If
+        Case 4, 6, 9, 11
+            If ord_day > 30 Then
+                Cells(6, "M") = "Please enter valid date for Order"
+                 GoTo SKIP_1
+            End If
+        End Select
+        
+        If OrderDate > CurrentDate Then
+            Cells(6, "M") = "Future date is not allowed for Order"
+             GoTo SKIP_1
+        End If
+        
+        If OrderDate < StartDate Then
+            Cells(6, "M") = "Order Date cannot be before 01-Jul-2017"
+             GoTo SKIP_1
+        End If
+         End If
+        
+   ' End If
+
+    
+    If Not (STARTROW = 0 And ENDROW = 0) Then
+        For rowNo = STARTROW To ENDROW Step 1
+            
+            WS_DATA(rowNo, 22) = ""
+            
+            
+            WS_DATA(rowNo, 6) = UCase(WS_DATA(rowNo, 6))
+            
+'Checks for empty cells
+            If WS_DATA(rowNo, 2) = "" Then
+                WS_DATA(rowNo, 22) = "Please Enter Document Type(B2C/B2B)"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 2) = "B2B" Then
+                If WS_DATA(rowNo, 3) = "" Then
+                    WS_DATA(rowNo, 22) = "Please enter GSTIN/UIN in case of B2B"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+            End If
+             If Cells(5, "B") = WS_DATA(rowNo, 3) Then
+        WS_DATA(rowNo, 22) = "GSTIN of Recipient and the Seller cannot be same."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+            
+            If Not WS_DATA(rowNo, 3) = "" Then
+                If Not WS_DATA(rowNo, 3) = "Disabled" Then
+                WS_DATA(rowNo, 3) = Trim(WS_DATA(rowNo, 3))
+                    OBJ_RE.Pattern = GSTIN_REGEX
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 3)) Then
+                        OBJ_RE.Pattern = UIN_REGEX
+                        If Not OBJ_RE.Test(WS_DATA(rowNo, 3)) Then
+                            WS_DATA(rowNo, 22) = "Please Enter Valid GSTIN/UIN of Recipient"
+                            GoTo SKIP_FURTHER_VALIDATION
+                        Else
+                            isUIN = True
+                        End If
+                    Else
+                        isGSTIN = True
+                    End If
+                End If
+            End If
+            
+            If WS_DATA(rowNo, 2) = "B2C" Then
+                If WS_DATA(rowNo, 4) = "" Then
+                    WS_DATA(rowNo, 22) = "Please Enter Name in case of B2C"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                OBJ_RE.Pattern = CUS_NAME_REGEX
+                If Not OBJ_RE.Test(WS_DATA(rowNo, 4)) Then
+                    WS_DATA(rowNo, 22) = "Please Enter valid Customer Name."
+                End If
+                
+            End If
+             If WS_DATA(rowNo, 5) = "" Then
+                WS_DATA(rowNo, 22) = "Please select Document Type"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            If WS_DATA(rowNo, 6) = "" Then
+                WS_DATA(rowNo, 22) = "Please Enter Document No."
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            OBJ_RE.Pattern = INVOICE_REGEX
+            WS_DATA(rowNo, 6) = Trim(WS_DATA(rowNo, 6))
+            If OBJ_RE.Test(WS_DATA(rowNo, 6)) Then
+                OBJ_RE.Pattern = INV_REGEX
+                If WS_DATA(rowNo, 6) = 0 Or WS_DATA(rowNo, 6) = "/0" Then
+                    WS_DATA(rowNo, 22) = "Document No cannot be 0 and special characters alone."
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                If OBJ_RE.Test(WS_DATA(rowNo, 6)) Then
+                    WS_DATA(rowNo, 22) = "Please enter valid Document No."
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+            Else
+                WS_DATA(rowNo, 22) = "Document No field can take alphanumeric and special character(/-)."
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 7) = "" Then
+                WS_DATA(rowNo, 22) = "Please Enter Document Date"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 8) = "" Then
+                WS_DATA(rowNo, 22) = "Please Enter Document Value"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            OBJ_RE.Pattern = DOCVALUE_REGEX
+            If Not OBJ_RE.Test(WS_DATA(rowNo, 8)) Then
+            WS_DATA(rowNo, 22) = "Document Value can be max 15 +ve digit numeric value followed by 2 decimal digit"
+            GoTo SKIP_FURTHER_VALIDATION
+            End If
+            If WS_DATA(rowNo, 8) < 0 Then
+                WS_DATA(rowNo, 22) = "Document Value cannot be negative"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 9) = 0 Then
+                WS_DATA(rowNo, 22) = "Please Enter Taxable Value"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            OBJ_RE.Pattern = DOCVALUE_REGEX
+            If Not OBJ_RE.Test(WS_DATA(rowNo, 9)) Then
+            WS_DATA(rowNo, 22) = "Taxable Value can be max 15 +ve digit numeric value followed by 2 decimal digit"
+            GoTo SKIP_FURTHER_VALIDATION
+            End If
+            If WS_DATA(rowNo, 9) < 0 Then
+                WS_DATA(rowNo, 22) = "Taxable Value cannot be negative"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 10) = "" Then
+                WS_DATA(rowNo, 22) = "Please select Inter/Intra for the Documents transaction"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 15) = "" Then
+                WS_DATA(rowNo, 22) = "Please select Place Of Supply for details of Documents"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 21) = "" Then
+                WS_DATA(rowNo, 22) = "Please select Place Of Supply for transaction which were held"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 10) = "Inter" Then
+                If WS_DATA(rowNo, 11) = "" Then
+                WS_DATA(rowNo, 22) = "IGST Value cannot be null for inter-state transaction earlier"
+                GoTo SKIP_FURTHER_VALIDATION
+                End If
+                If WS_DATA(rowNo, 17) = "" Or WS_DATA(rowNo, 18) = "" Then
+                WS_DATA(rowNo, 22) = "CGST and SGST value cannot be null for intra-state supply subsequently"
+                GoTo SKIP_FURTHER_VALIDATION
+                End If
+            End If
+            
+            If WS_DATA(rowNo, 10) = "Intra" Then
+                If WS_DATA(rowNo, 11) = "" Or WS_DATA(rowNo, 12) = "" Then
+                    WS_DATA(rowNo, 22) = "CGST and SGST Value cannot be null for intra-state transaction earlier"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                If WS_DATA(rowNo, 17) = "" Then
+                WS_DATA(rowNo, 22) = "IGST value cannot be null for inter-state supply subsequently"
+                GoTo SKIP_FURTHER_VALIDATION
+                End If
+                
+                
+            End If
+                       
+            OBJ_RE.Pattern = INV_DATE_REGEX
+            
+            WS_DATA(rowNo, 7) = Trim(WS_DATA(rowNo, 7))
+            WS_DATA(rowNo, 7) = Replace(WS_DATA(rowNo, 7), "/", "-")
+            
+            If Not OBJ_RE.Test(WS_DATA(rowNo, 7)) Then
+                WS_DATA(rowNo, 22) = "Either Invalid date or please enter Invoice/Doc Date in dd-mm-yyyy format"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            inv_day = Left(WS_DATA(rowNo, 7), 2)
+            inv_month = Mid(WS_DATA(rowNo, 7), 4, 2)
+            inv_year = Mid(WS_DATA(rowNo, 7), 7, 4)
+            total_inv_month = Mid(WS_DATA(rowNo, 7), 4, 2)
+            total_inv_year = Mid(WS_DATA(rowNo, 7), 7, 4)
+            
+            invoiceDate = DateSerial(inv_year, inv_month, inv_day)
+            
+            If inv_year < 2017 Then
+                WS_DATA(rowNo, 22) = "Document Date cannot be earlier than 01-Jul-17 or Enter valid Date"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If inv_month > 12 Then
+                WS_DATA(rowNo, 22) = "Document Date cannot be earlier than 01-Jul-17 or Enter valid Date"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If inv_month < 1 Then
+                WS_DATA(rowNo, 22) = "Document Date cannot be earlier than 01-Jul-17 or Enter valid Date"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If inv_day < 1 Then
+                WS_DATA(rowNo, 22) = "Document Date cannot be earlier than 01-Jul-17 or Enter valid Date"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If (inv_month = 2) Then
+                'leapYear = isLeapYear(ord_year)
+                leapYear = (Month(DateSerial(ord_year, 2, 29)) = 2)
+                If (leapYear = True) Then
+                    If (inv_day > 29) Then
+                        WS_DATA(rowNo, 22) = "Please enter valid date for Document Date"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                Else
+                    If (inv_day > 28) Then
+                        WS_DATA(rowNo, 22) = "Please enter valid date for Document Date"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                End If
+            End If
+            
+            
+            Select Case inv_month
+            Case 1, 3, 5, 7, 8, 10, 12
+                If inv_day > 31 Then
+                    WS_DATA(rowNo, 22) = "Please enter valid date for Document details"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+            Case 4, 6, 9, 11
+                If inv_day > 30 Then
+                    WS_DATA(rowNo, 22) = "Please enter valid date for Document details"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+            End Select
+            
+            If invoiceDate > CurrentDate Then
+                WS_DATA(rowNo, 22) = "Future date is not allowed for  Document"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If invoiceDate < StartDate Then
+                WS_DATA(rowNo, 22) = "Document date cannot be before 01-Jul-17"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            
+'Numeric Value checks
+            OBJ_RE.Pattern = AMT_REGEX
+            
+            If Not (IsNumeric(WS_DATA(rowNo, 8))) Then
+                WS_DATA(rowNo, 22) = "Document Details- Value should be numeric"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If Not OBJ_RE.Test(WS_DATA(rowNo, 8)) Then
+                WS_DATA(rowNo, 22) = "Document Details- Value can take upto 15 digits numeric value followed by 2 decimal value."
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If Right(WS_DATA(rowNo, 8), 1) = "." Then
+            WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in Document value"
+            GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If Not (IsNumeric(WS_DATA(rowNo, 9))) Then
+                WS_DATA(rowNo, 22) = "Document Taxable- Value should be numeric"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If Right(WS_DATA(rowNo, 9), 1) = "." Then
+            WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in Document taxable value"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+            
+            If Not OBJ_RE.Test(WS_DATA(rowNo, 9)) Then
+                WS_DATA(rowNo, 22) = "Document Taxable- Value can take upto 15 digits numeric value followed by 2 decimal value."
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If Not WS_DATA(rowNo, 11) = "" Then
+                If Not WS_DATA(rowNo, 11) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 11))) Then
+                        WS_DATA(rowNo, 22) = "Integrated Tax- Value should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 11)) Then
+                        WS_DATA(rowNo, 22) = "Integrated Tax- Value can take upto 15 digits numeric value followed by 2 decimal value."
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 11), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in IGST value"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 12) = "" Then
+                If Not WS_DATA(rowNo, 12) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 12))) Then
+                        WS_DATA(rowNo, 22) = "Central Tax- Value should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 12)) Then
+                        WS_DATA(rowNo, 22) = "Central- Value can take upto 15 digits numeric value followed by 2 decimal value."
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 12), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in CGST value"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 13) = "" Then
+                If Not WS_DATA(rowNo, 13) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 13))) Then
+                        WS_DATA(rowNo, 22) = "State Tax- Value should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 13)) Then
+                        WS_DATA(rowNo, 22) = "State Tax- Value can take upto 15 digits numeric value followed by 2 decimal value."
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 13), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in SGST value"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 14) = "" Then
+                If Not (IsNumeric(WS_DATA(rowNo, 14))) Then
+                    WS_DATA(rowNo, 22) = "Cess Tax- Value should be numeric"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                
+                If Not OBJ_RE.Test(WS_DATA(rowNo, 14)) Then
+                    WS_DATA(rowNo, 22) = "Cess Value can take only 15 +ve digits numeric value, followed by 2 decimal value."
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                
+                If Right(WS_DATA(rowNo, 14), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in CESS value"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+            End If
+            
+            If Not WS_DATA(rowNo, 17) = "" Then
+                If Not WS_DATA(rowNo, 17) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 17))) Then
+                        WS_DATA(rowNo, 22) = "Integrated Tax - Value for Transaction which were held should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 17)) Then
+                        WS_DATA(rowNo, 22) = "IGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 17), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in IGST value which were held"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 18) = "" Then
+                If Not WS_DATA(rowNo, 18) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 18))) Then
+                        WS_DATA(rowNo, 22) = "CGST - Value for Transaction which were held should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 18)) Then
+                        WS_DATA(rowNo, 22) = "CGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value."
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 18), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in CGST value which were held"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 19) = "" Then
+                If Not WS_DATA(rowNo, 19) = "Disabled" Then
+                    If Not (IsNumeric(WS_DATA(rowNo, 19))) Then
+                        WS_DATA(rowNo, 22) = "SGST/UTGST Value for Transaction which were held should be numeric"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 19)) Then
+                        WS_DATA(rowNo, 22) = "SGST/UTGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value"
+                        GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                    
+                    If Right(WS_DATA(rowNo, 19), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in SGST/UTGST value which were held"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+                End If
+            End If
+            
+            If Not WS_DATA(rowNo, 20) = "" Then
+                If Not (IsNumeric(WS_DATA(rowNo, 20))) Then
+                    WS_DATA(rowNo, 22) = "Cess Tax - Value for Transaction which were held should be numeric"
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                
+                If Not OBJ_RE.Test(WS_DATA(rowNo, 20)) Then
+                    WS_DATA(rowNo, 22) = "Cess Tax - Value for Transaction which were held can take upto 15 digits numeric value followed by 2 decimal value."
+                    GoTo SKIP_FURTHER_VALIDATION
+                End If
+                
+                If Right(WS_DATA(rowNo, 20), 1) = "." Then
+                    WS_DATA(rowNo, 22) = "Please enter two digit numeric value after decimal point in CESS value which were held"
+                    GoTo SKIP_FURTHER_VALIDATION
+                    End If
+            End If
+            
+'Negative amount checks
+            If WS_DATA(rowNo, 8) < 0 Then
+                WS_DATA(rowNo, 22) = "Document Value should be greater than or equal to zero"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            If WS_DATA(rowNo, 9) < 0 Then
+                WS_DATA(rowNo, 22) = "SKIP_FURTHER_VALIDATION Taxable Value should be greater than or equal to zero"
+                GoTo SKIP_FURTHER_VALIDATION
+            End If
+            
+            'If CDec(WS_DATA(rowNo, 9)) > CDec(WS_DATA(rowNo, 8)) Then
+                'WS_DATA(rowNo, 22) = "Invoice Taxable Value cannot be greater than invoice value"
+                'GoTo SKIP_FURTHER_VALIDATION
+           ' End If
+            
+            
+'Total amount for tax values
+            If Not WS_DATA(rowNo, 11) = "" Then
+            If Not WS_DATA(rowNo, 11) = "Disabled" Then
+            bIGST = bIGST + CDec(WS_DATA(rowNo, 11))
+            Cells(8, "K") = bIGST
+            End If
+            If WS_DATA(rowNo, 11) = "Disabled" Then
+            Cells(8, "K") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 12) = "" Then
+            If Not WS_DATA(rowNo, 12) = "Disabled" Then
+            
+            bCGST = bCGST + CDec(WS_DATA(rowNo, 12))
+            Cells(8, "L") = bCGST
+            End If
+            If WS_DATA(rowNo, 12) = "Disabled" Then
+            Cells(8, "L") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 13) = "" Then
+            If Not WS_DATA(rowNo, 13) = "Disabled" Then
+            
+            bSGST = bSGST + CDec(WS_DATA(rowNo, 13))
+            Cells(8, "M") = bSGST
+            End If
+            If WS_DATA(rowNo, 13) = "Disabled" Then
+            Cells(8, "M") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 14) = "" Then
+            If Not WS_DATA(rowNo, 14) = "Disabled" Then
+            bCess = bCess + CDec(WS_DATA(rowNo, 14))
+            Cells(8, "N") = bCess
+            End If
+            End If
+            If WS_DATA(rowNo, 14) = "" Then
+            
+            Cells(8, "N") = ""
+            
+            End If
+            
+            If Not WS_DATA(rowNo, 17) = "" Then
+            If Not WS_DATA(rowNo, 17) = "Disabled" Then
+            aIGST = aIGST + CDec(WS_DATA(rowNo, 17))
+            Cells(8, "Q") = aIGST
+            End If
+            If WS_DATA(rowNo, 17) = "Disabled" Then
+            Cells(8, "Q") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 18) = "" Then
+            If Not WS_DATA(rowNo, 18) = "Disabled" Then
+            aCGST = aCGST + CDec(WS_DATA(rowNo, 18))
+            Cells(8, "R") = aCGST
+            End If
+            If WS_DATA(rowNo, 18) = "Disabled" Then
+            Cells(8, "R") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 19) = "" Then
+            If Not WS_DATA(rowNo, 19) = "Disabled" Then
+            aSGST = aSGST + CDec(WS_DATA(rowNo, 19))
+            Cells(8, "S") = aSGST
+            End If
+            If WS_DATA(rowNo, 19) = "Disabled" Then
+            Cells(8, "S") = ""
+            End If
+            End If
+            
+            If Not WS_DATA(rowNo, 20) = "" Then
+            If Not WS_DATA(rowNo, 20) = "Disabled" Then
+            aCess = aCess + CDec(WS_DATA(rowNo, 20))
+            Cells(8, "T") = aCess
+            End If
+            
+            End If
+            
+            If WS_DATA(rowNo, 20) = "" Then
+           
+            Cells(8, "T") = ""
+            
+            End If
+            
+           'code for duplicate check of credit & debit note No.
+
+    DocType = Right(WS_DATA(rowNo, 5), 4)
+  If total_inv_month > 0 And total_inv_month < 4 Then
+             total_inv_year = total_inv_year - 1
+             key = DocType & "_" & WS_DATA(rowNo, 6) & "_" & total_inv_year
+        Else
+            key = DocType & "_" & WS_DATA(rowNo, 6) & "_" & total_inv_year
+        End If
+
+    
+            
+        If DUPLICATE_REC.Exists(key) Then
+            WS_DATA(rowNo, 22) = "Document No. with Duplicate Entry in row Number " & (DUPLICATE_REC.Item(key) + 12)
+        
+        Else
+            DUPLICATE_REC.Add key, rowNo
+        End If
+            
+SKIP_FURTHER_VALIDATION:
+            
+        Next
+    End If
+    
+    If msgFlag = "VALID" Then
+        MsgBox "" & LASTROW - 12 & " records in this sheet "
+    End If
+    
+    Set DUPLICATE_REC = Nothing
+    
+SKIP_1:
+    
+    Exit Function
+    
+ERR_HANDLER:
+    MsgBox "Error Encountered"
+    
+    
+End Function
+Sub autoGenSerial()
+
+    Dim serialNo As Integer
+    Dim Row As Integer
+    
+    serialNo = 1
+        
+    For Row = STARTROW To ENDROW
+        'Debug.Print WS_DATA(Row, 2)
+        
+        If WS_DATA(Row, 2) <> "" Then
+           WS_DATA(Row, 1) = serialNo
+           serialNo = serialNo + 1
+        End If
+    Next Row
+        
+End Sub
+
+Function checkAndCreateJson()
+    Dim errorCount, addCount, rowNo As Integer
+    Dim errMsg As String
+    
+    errMsg = " Exists in the sheet. Please click Create File To Upload after resolving the errors"
+    
+    addCount = 0
+    
+    If Not (STARTROW = 0 And ENDROW = 0) Then
+        For rowNo = STARTROW To ENDROW Step 1
+            
+            If Not WS_DATA(rowNo, 22) = "" Then
+                errorCount = errorCount + 1
+            End If
+            
+        Next
+    End If
+    
+    If (STARTROW = 0 And ENDROW = 0) Then
+        
+        MsgBox "Please type atleast one record to create file to upload", vbCritical
+        
+    ElseIf errorCount = 0 Then
+        
+        If Cells(5, "C") <> "" Then
+            MsgBox "Valid GSTIN is Mandatory", vbCritical
+        ElseIf Cells(6, "J") <> "" Then
+            MsgBox "Valid Order Number is Mandatory", vbCritical
+        ElseIf Cells(6, "M") <> "" Then
+            MsgBox "Valid Order Date is Mandatory", vbCritical
+        Else
+            autoGenSerial
+            createJsonFile
+        End If
+        
+    ElseIf errorCount = 1 Then
+        MsgBox errorCount & " error" & errMsg, vbCritical
+    Else
+        MsgBox errorCount & " errors" & errMsg, vbCritical
+    End If
+    
+End Function
+
+Function createJsonFile()
+    Dim rowNo As Integer
+    Dim path, json As String
+    Dim fs As Object, jsonfile
+    checkUIN = False
+    checkGSTIN = False
+    
+    path = Application.GetSaveAsFilename
+    
+    If path <> "False" Then
+        
+        Set fs = CreateObject("Scripting.FileSystemObject")
+        
+        path = path + FILE_TYPE
+        Set jsonfile = fs.CreateTextFile(path, True)
+        
+        jsonfile.Write ("{""gstin"":""")
+        jsonfile.Write (Cells(5, "B"))
+        jsonfile.Write (""",""refundRsn"":""")
+        jsonfile.Write ("INTRVC")
+        jsonfile.Write (""",""version"":""")
+        jsonfile.Write ("2.0")
+        jsonfile.Write (""",""OdrNo"":""")
+        jsonfile.Write (Cells(6, "I"))
+        jsonfile.Write (""",""OdrDt"":""")
+        jsonfile.Write (Cells(6, "L"))
+        jsonfile.Write (""",""stmt06"":[{")
+        
+        For rowNo = STARTROW To ENDROW Step 1
+        
+         If Not WS_DATA(rowNo, 3) = "" Then
+                If Not WS_DATA(rowNo, 3) = "Disabled" Then
+                    OBJ_RE.Pattern = GSTIN_REGEX
+                    If Not OBJ_RE.Test(WS_DATA(rowNo, 3)) Then
+                        OBJ_RE.Pattern = UIN_REGEX
+                        If Not OBJ_RE.Test(WS_DATA(rowNo, 3)) Then
+                            WS_DATA(rowNo, 22) = "Please Enter Valid GSTIN/UIN of Recipient"
+                        Else
+                            checkUIN = True
+                        End If
+                    Else
+                        checkGSTIN = True
+                    End If
+                End If
+            End If
+            
+            If (WS_DATA(rowNo, 2)) = "B2C" And (WS_DATA(rowNo, 10)) = "Inter" Then
+                
+                json = B2CInter(json, rowNo)
+                
+            Else
+                
+                If (WS_DATA(rowNo, 2)) = "B2C" And (WS_DATA(rowNo, 10)) = "Intra" Then
+                    
+                    json = B2CIntra(json, rowNo)
+                    
+                Else
+                    
+                    If (WS_DATA(rowNo, 2)) = "B2B" And (WS_DATA(rowNo, 10)) = "Inter" And checkGSTIN = True Then
+                        
+                        json = B2BInterGSTIN(json, rowNo)
+                        
+                    Else
+                        
+                        If (WS_DATA(rowNo, 2)) = "B2B" And (WS_DATA(rowNo, 10)) = "Inter" And checkUIN = True Then
+                            
+                            json = B2BInterUIN(json, rowNo)
+                            
+                        Else
+                            
+                            If (WS_DATA(rowNo, 2)) = "B2B" And (WS_DATA(rowNo, 10)) = "Intra" And checkGSTIN = True Then
+                                
+                                json = B2BIntraGSTIN(json, rowNo)
+                                
+                            Else
+                                
+                                If (WS_DATA(rowNo, 2)) = "B2B" And (WS_DATA(rowNo, 10)) = "Intra" And checkUIN = True Then
+                                    
+                                    json = B2BIntraUIN(json, rowNo)
+                                    
+                                End If
+                            End If
+                        End If
+                    End If
+                End If
+            End If
+            
+            If rowNo = ENDROW Then
+                json = json & ("""}")
+            Else
+                json = json & ("""},{")
+            End If
+            
+            jsonfile.Write json
+            
+        Next
+        
+        jsonfile.Write ("]}")
+        
+        jsonfile.Close
+        
+        MsgBox "File has been created and placed in  " & path & "  ! You may now proceed to upload the File in the GST Web Portal", vbInformation
+        
+        Set fs = Nothing
+        Set jsonfile = Nothing
+        
+    End If
+    
+End Function
+
+Function B2CInter(ByVal json As String, ByVal rowNo As Integer) As String
+    
+    Dim json1 As String
+    
+    'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+     'Else
+    
+    'If (WS_DATA(rowNo, 11)) = "" And WS_DATA(rowNo, 13) = "" And WS_DATA(rowNo, 18) = "" And WS_DATA(rowNo, 19) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+  ' Else
+    
+    'If (WS_DATA(rowNo, 11)) = "" And WS_DATA(rowNo, 13) = "" And WS_DATA(rowNo, 18) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+   ' Else
+    
+    'If (WS_DATA(rowNo, 11)) = "" And WS_DATA(rowNo, 13) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+   
+  
+   ' Else
+   
+    
+   ' If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+   
+   ' Else
+    
+   ' If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+   ' Else
+    
+    'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+   
+  ' Else
+    
+    'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+    'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+   
+    'Else
+    
+    'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+  
+    'Else
+    
+   ' If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+        
+        json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+   ' Else
+    
+    'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+        
+      '  json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 14)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+ 
+   ' Else
+    
+    
+    'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+   ' Else
+   
+    'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+     
+   ' Else
+    
+    'If (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 15)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+   ' Else
+    
+   ' If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+        
+      '  json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+        
+ ' Else
+  
+   'If (WS_DATA(rowNo, 11)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+  ' Else
+   
+ 
+' If (WS_DATA(rowNo, 18)) = "" Then
+        
+        
+       ' json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+   ' Else
+    
+' If (WS_DATA(rowNo, 19)) = "" Then
+        
+        'json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+   ' Else
+    
+ If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+        
+        json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+    
+If (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+        
+        json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    End If
+    
+If Not (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+
+    json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+End If
+
+If (WS_DATA(rowNo, 20)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+    json1 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+
+'B2CInter = json & json1
+B2CInter = json1
+
+End Function
+
+
+Function B2CIntra(ByVal json As String, ByVal rowNo As Integer) As String
+
+Dim json2 As String
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 15)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 13)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21))))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 16)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 21)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 13)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 15)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 13)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If ((WS_DATA(rowNo, 12))) = "" And (WS_DATA(rowNo, 17)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 21)) = "" Then
+    
+   ' json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If ((WS_DATA(rowNo, 12))) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+    
+    json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If Not (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+    
+    json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+
+'If (WS_DATA(rowNo, 16)) = "" Then
+    
+    'json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+    
+If Not (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+
+json2 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""custName"":""") & (WS_DATA(rowNo, 4)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+
+'B2CIntra = json & json2
+
+B2CIntra = json2
+'comment
+
+End Function
+
+Function B2BInterGSTIN(ByVal json As String, ByVal rowNo As Integer) As String
+
+Dim json3 As String
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+'Else
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+'Else
+
+'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+'Else
+
+
+'If (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 19)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+If (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+
+json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+
+json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+End If
+
+'If (WS_DATA(rowNo, 11)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+'Else
+
+'If (WS_DATA(rowNo, 18)) = "" Then
+
+'json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+'Else
+If Not (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+json3 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+
+End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+''End If
+'End If
+'End If
+
+'B2BInterGSTIN = json & json3
+B2BInterGSTIN = json3
+
+End Function
+
+
+Function B2BInterUIN(ByVal json As String, ByVal rowNo As Integer) As String
+
+Dim json4 As String
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 19)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 18)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 19)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+
+json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+'If (WS_DATA(rowNo, 19)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 18)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+
+json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+'If (WS_DATA(rowNo, 11)) = "" Then
+
+'json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUIin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+If Not (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+json4 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bIGST"":") & (WS_DATA(rowNo, 11)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCGST"":") & (WS_DATA(rowNo, 18)) & (",""aSGST"":") & (WS_DATA(rowNo, 19)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+
+'B2BInterUIN = json & json4
+B2BInterUIN = json4
+
+End Function
+
+
+
+Function B2BIntraGSTIN(ByVal json As String, ByVal rowNo As Integer) As String
+
+Dim json5 As String
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+'do from here
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 20)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+
+
+'If (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 20)) = "" And Not (WS_DATA(rowNo, 14)) = "" Then
+
+json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+End If
+
+'If (WS_DATA(rowNo, 17)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+
+json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+
+'If (WS_DATA(rowNo, 13)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" Then
+
+'json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+If Not (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+json5 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rGstin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+
+'B2BIntraGSTIN = json & json5
+B2BIntraGSTIN = json5
+
+End Function
+
+
+Function B2BIntraUIN(ByVal json As String, ByVal rowNo As Integer) As String
+
+Dim json6 As String
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 13)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 18)) & (",""aPOS"":""") & (WS_DATA(rowNo, 19)))
+'Else
+
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 14)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 21)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 13)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 21)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 17)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" And (WS_DATA(rowNo, 18)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 12)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 18)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+
+'If (WS_DATA(rowNo, 15)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 11)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+
+'If (WS_DATA(rowNo, 12)) = "" Then
+
+'json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""rUin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+'Else
+If Not (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If (WS_DATA(rowNo, 14)) = "" And Not (WS_DATA(rowNo, 20)) = "" Then
+json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aCess"":") & (WS_DATA(rowNo, 20)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+
+If Not (WS_DATA(rowNo, 14)) = "" And (WS_DATA(rowNo, 20)) = "" Then
+json6 = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""invType"":""") & (WS_DATA(rowNo, 2)) & (""",""uin"":""") & (WS_DATA(rowNo, 3)) & (""",""docType"":""") & (WS_DATA(rowNo, 5)) & (""",""inum"":""") & (WS_DATA(rowNo, 6)) & (""",""idt"":""") & (WS_DATA(rowNo, 7)) & (""",""val"":") & (WS_DATA(rowNo, 8)) & (",""txVal"":") & (WS_DATA(rowNo, 9)) & (",""bInt"":""") & (WS_DATA(rowNo, 10)) & (""",""bCGST"":") & (WS_DATA(rowNo, 12)) & (",""bSGST"":") & (WS_DATA(rowNo, 13)) & (",""bCess"":") & (WS_DATA(rowNo, 14)) & (",""bPOS"":""") & (WS_DATA(rowNo, 15)) & (""",""aInt"":""") & (WS_DATA(rowNo, 16)) & (""",""aIGST"":") & (WS_DATA(rowNo, 17)) & (",""aPOS"":""") & (WS_DATA(rowNo, 21)))
+End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+'End If
+
+'B2BIntraUIN = json & json6
+B2BIntraUIN = json6
+
+End Function
+
+
+================================================================================
+  END OF VBA EXTRACTION
+  2 module(s) with code exported
+  4 empty module(s) listed in TOC only
+================================================================================
+
+================================================================================
+
+
+================================================================================
+APPENDIX C: COMPLETE ERROR MESSAGE CATALOG — S06
+================================================================================
+
+Error column in this utility: V (Col 22)
+
+This is the exhaustive list of every error message that the VBA validation
+engine can produce. Use this as the validation specification for your app —
+each error message maps to a specific validation rule that must be implemented.
+
+--------------------------------------------------------------------------------
+C.1  HEADER-LEVEL ERRORS (Top Section — GSTIN, Return Period, etc.)
+--------------------------------------------------------------------------------
+
+  [Row 5, Col C]  "GSTIN is not available/incorrect."
+  [Row 5, Col C]  "Mandatory Field"
+  [Row 6, Col J]  "Please enter valid order number"
+  [Row 6, Col M]  "Please enter order date in dd-mm-yyyy format."
+  [Row 6, Col M]  "Order Date cannot be earlier than 01-Jul-2017 or Enter valid Date"
+  [Row 6, Col M]  "Please enter valid date for Order"
+  [Row 6, Col M]  "Order Date cannot be before 01-Jul-2017"
+
+--------------------------------------------------------------------------------
+C.2  ROW-LEVEL VALIDATION ERRORS (Data Entry Grid)
+--------------------------------------------------------------------------------
+
+  C.2.1  GSTIN / SUPPLIER
+  ~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please enter GSTIN/UIN in case of B2B"
+    → "GSTIN of Recipient and the Seller cannot be same."
+    → "Please Enter Valid GSTIN/UIN of Recipient"
+
+  C.2.2  DOCUMENT TYPE
+  ~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Document Type(B2C/B2B)"
+    → "Please select Document Type"
+
+  C.2.3  DOCUMENT NUMBER / INVOICE NO
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Document No."
+    → "Document No cannot be 0 and special characters alone."
+    → "Please enter valid Document No."
+    → "Document No field can take alphanumeric and special character(/-)."
+    → "Document No. with Duplicate Entry in row Number"
+
+  C.2.4  DOCUMENT DATE
+  ~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Document Date"
+    → "Either Invalid date or please enter Invoice/Doc Date in dd-mm-yyyy format"
+    → "Document Date cannot be earlier than 01-Jul-17 or Enter valid Date"
+    → "Please enter valid date for Document Date"
+    → "Please enter valid date for Document details"
+    → "Future date is not allowed for  Document"
+    → "Document date cannot be before 01-Jul-17"
+
+  C.2.5  DOCUMENT VALUE / TAXABLE VALUE
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Document Value"
+    → "Document Value can be max 15 +ve digit numeric value followed by 2 decimal digit"
+    → "Document Value cannot be negative"
+    → "Please Enter Taxable Value"
+    → "Taxable Value can be max 15 +ve digit numeric value followed by 2 decimal digit"
+    → "Taxable Value cannot be negative"
+    → "IGST Value cannot be null for inter-state transaction earlier"
+    → "CGST and SGST value cannot be null for intra-state supply subsequently"
+    → "CGST and SGST Value cannot be null for intra-state transaction earlier"
+    → "IGST value cannot be null for inter-state supply subsequently"
+    → "Document Details- Value should be numeric"
+    → "Document Details- Value can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Document value"
+    → "Document Taxable- Value should be numeric"
+    → "Please enter two digit numeric value after decimal point in Document taxable value"
+    → "Document Taxable- Value can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Integrated Tax- Value should be numeric"
+    → "Integrated Tax- Value can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in IGST value"
+    → "Central Tax- Value should be numeric"
+    → "Central- Value can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in CGST value"
+    → "State Tax- Value should be numeric"
+    → "State Tax- Value can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in SGST value"
+    → "Cess Tax- Value should be numeric"
+    → "Cess Value can take only 15 +ve digits numeric value, followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in CESS value"
+    → "Integrated Tax - Value for Transaction which were held should be numeric"
+    → "IGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value"
+    → "Please enter two digit numeric value after decimal point in IGST value which were held"
+    → "CGST - Value for Transaction which were held should be numeric"
+    → "CGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in CGST value which were held"
+    → "SGST/UTGST Value for Transaction which were held should be numeric"
+    → "SGST/UTGST Value can take only 15 +ve digits numeric value, followed by 2 decimal value"
+    → "Please enter two digit numeric value after decimal point in SGST/UTGST value which were held"
+    → "Cess Tax - Value for Transaction which were held should be numeric"
+    → "Cess Tax - Value for Transaction which were held can take upto 15 digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in CESS value which were held"
+    → "Document Value should be greater than or equal to zero"
+    → "SKIP_FURTHER_VALIDATION Taxable Value should be greater than or equal to zero"
+    → "Invoice Taxable Value cannot be greater than invoice value"
+
+  C.2.6  PLACE OF SUPPLY
+  ~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please select Place Of Supply for details of Documents"
+    → "Please select Place Of Supply for transaction which were held"
+
+  C.2.7  INTER / INTRA CLASSIFICATION
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please select Inter/Intra for the Documents transaction"
+    → "Inter"
+    → "Intra"
+
+  C.2.8  OTHER
+  ~~~~~~~~~~~~~
+    → "Disabled"
+    → "Please Enter Name in case of B2C"
+    → "Please Enter valid Customer Name."
+
+--------------------------------------------------------------------------------
+C.3  POPUP / MSGBOX ERRORS (Shown to user as dialog boxes)
+--------------------------------------------------------------------------------
+
+  → "Error Encountered"
+  → "Please type atleast one record to create file to upload"
+  → "Valid GSTIN is Mandatory"
+  → "Valid Order Number is Mandatory"
+  → "Valid Order Date is Mandatory"
+  → "File has been created and placed in"
+  → "errors"
+
+--------------------------------------------------------------------------------
+TOTAL UNIQUE ERROR MESSAGES: 82
+  Header-level : 7
+  Row-level    : 68
+  MsgBox/Popup : 7
+--------------------------------------------------------------------------------
+
+================================================================================
+  END OF HOLISTIC REFERENCE — ALL DATA FOR THIS REFUND TYPE IS ABOVE
+================================================================================

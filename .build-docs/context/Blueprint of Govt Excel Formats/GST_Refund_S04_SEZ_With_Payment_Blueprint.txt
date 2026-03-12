@@ -1,0 +1,1683 @@
+================================================================================
+  GST REFUND STATEMENT 04 — HOLISTIC REFERENCE
+  Refund of Tax Paid on Supplies to SEZ Unit/Developer with Payment (SEZWP)
+  Source: GST_REFUND_S04.xlsb + VBA Code + Format Guide
+================================================================================
+
+================================================================================
+1. UTILITY IDENTITY
+================================================================================
+
+File Name                : GST_REFUND_S04.xlsb
+Sheet Name               : RFD_STMT04
+Statement Name (JSON)    : stmt04
+Refund Reason Code       : SEZWP
+Version                  : 3.0 (updated 25-Apr-2025)
+Data Range               : A15:L(last row) — max 10,000 rows
+VBA Author               : Kayalvizhi (15-Dec-2017)
+Sheet Protection Password: aN*4r!U5
+Tutorial Link            : https://tutorial.gst.gov.in/userguide/refund/Refund_on_Account_of_Supplies_made_to_SEZ_Unit__WPT_manual.htm
+
+================================================================================
+2. PURPOSE & LEGAL BASIS
+================================================================================
+
+This template is for supplies made to SEZ units or SEZ developers where IGST
+has been paid, and refund of that tax is claimed.
+
+This is a TAX-PAID refund — the key fields are Taxable Value + IGST + Cess.
+
+Structurally similar to Statement 02 (export services with payment) but:
+  - The counterparty is an SEZ recipient (identified by their GSTIN) instead
+    of export remittance proof (BRC/FIRC).
+  - Endorsed invoice / shipping-linked transport evidence sits in Cols G:H
+    instead of BRC evidence.
+
+IMPORTANT NOTE — VERSION 3.0 CHANGE:
+  Return period fields (From/To) are present in the sheet but their validation
+  is COMMENTED OUT in VBA v3.0. They are NOT included in JSON output.
+
+================================================================================
+3. TOP-SECTION INPUT
+================================================================================
+
+Field              | Cell | Mandatory         | Validation
+-------------------|------|-------------------|-------------------------------------------
+GSTIN              | E6   | Yes               | Standard GSTIN regex; upper-cased & trimmed
+From Return Period | E7   | (Disabled in v3.0)| Present in sheet but not validated
+To Return Period   | E8   | (Disabled in v3.0)| Present in sheet but not validated
+
+================================================================================
+4. ROW-WISE COLUMN LAYOUT (A:L)
+================================================================================
+
+Col | Field                                          | Mandatory      | Notes
+----|------------------------------------------------|----------------|-------------------------
+A   | Sr. No.                                        | Auto-generated | Auto-serial before JSON
+B   | GSTIN of SEZ Recipient                         | Yes            | Must be valid GSTIN;
+    |                                                |                |   CANNOT be same as self
+C   | Type of Document                               | Yes            | Invoice / Debit Note /
+    |                                                |                |   Credit Note
+D   | Document No.                                   | Yes            | Max 16 alphanumeric + /-
+E   | Document Date                                  | Yes            | dd-mm-yyyy;
+    |                                                |                |   >= 01-Jul-2017;
+    |                                                |                |   <= current date
+F   | Document Value                                 | Yes            | Numeric, >= 0, max 15+2
+G   | Shipping Bill / Endorsed Invoice by SEZ No.    | Optional       | Alphanumeric if provided
+H   | Shipping Bill / Endorsed Invoice by SEZ Date   | Conditional    | Required if Col G present;
+    |                                                |                |   dd-mm-yyyy; <= current
+I   | Taxable Value                                  | Yes            | Numeric, >= 0;
+    |                                                |                |   IGST must be <= this
+J   | Integrated Tax (IGST)                          | Yes            | Numeric, >= 0,
+    |                                                |                |   <= Taxable Value
+K   | Cess                                           | Optional       | Numeric, >= 0 if provided
+L   | Error                                          | —              | Auto-populated by VBA
+
+================================================================================
+5. VALIDATION RULES
+================================================================================
+
+RECIPIENT GSTIN:
+  - Must be a valid GSTIN (regex check).
+  - Must differ from the applicant's own GSTIN (self-supply not allowed).
+
+TAX AMOUNTS:
+  - IGST is mandatory and must not exceed Taxable Value.
+  - If Cess is provided, it must be numeric and non-negative.
+
+SHIPPING / ENDORSED INVOICE:
+  - If shipping bill number (Col G) is provided, shipping bill date (Col H)
+    is validated for calendar correctness.
+  - Shipping bill date <= current date.
+
+DOCUMENT DATES:
+  - Standard calendar validation (leap year aware).
+  - >= 01-Jul-2017 and <= current date.
+
+RUNNING TOTALS (ROW 11):
+  Cell F11 = Total Document Value
+  Cell G11 = ??? (unclear from code — may be total of another field)
+  Cell J11 = Total IGST
+  Cell K11 = Total Cess
+  (Computed using same +Invoice/DN, −CN logic)
+
+DUPLICATE DETECTION:
+  Key = DocType suffix (last 4 chars) + "_" + DocNo + "_" + FY
+  If invoice month is Jan-Mar, FY year is decremented by 1.
+  Dictionary: DUPLICATE_REC
+
+AUTO-SERIAL:
+  Sr. No. auto-generated before JSON. Only rows with recipient GSTIN
+  (Col B not blank) get serial numbers.
+
+================================================================================
+6. REGEX VALIDATION PATTERNS
+================================================================================
+
+Pattern Name   | Regex                                                    | Applied To
+---------------|----------------------------------------------------------|------------------
+GSTIN_REGEX    | [0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$ | GSTIN (note: no ^ anchor)
+INV_DATE_REGEX | [0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$  | All dates
+RET_PRD_REGEX  | ^[0-1]{1}[0-9]{1}[0-9]{4}$                              | Return period
+INVOICE_REGEX  | ^[a-zA-Z0-9\/-]{0,16}$                                   | Doc numbers
+SI_NO_REGEX    | ^[0-9]{0,15}$                                            | Serial number
+VALUE_REGEX    | ^([0-9]{0,15})([.][0-9]{0,2})?$                          | Value fields
+
+================================================================================
+7. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "...",
+  "refundRsn": "SEZWP",
+  "version": "3.0",
+  "stmt04": [ { ... }, { ... } ]
+}
+
+NOTE: No fromFp/toFp in v3.0 JSON (commented out).
+
+PER-ROW JSON KEYS:
+
+JSON Key | Source Col | Meaning
+---------|-----------|------------------------------------------
+sno      | A (Col 1) | Serial number
+rGstin   | B (Col 2) | Recipient GSTIN (SEZ unit/developer)
+docType  | C (Col 3) | Document type
+inum     | D (Col 4) | Document number
+idt      | E (Col 5) | Document date
+val      | F (Col 6) | Document value
+sbnum    | G (Col 7) | Shipping bill / endorsed invoice no.
+         |           |   (OMITTED from JSON if blank)
+sbdt     | H (Col 8) | Shipping bill date
+         |           |   (OMITTED from JSON if blank)
+txval    | I (Col 9) | Taxable value
+iamt     | J (Col 10)| Integrated tax (IGST)
+cess     | K (Col 11)| Cess (OMITTED from JSON if blank)
+
+JSON CONDITIONAL LOGIC — FOUR PATHS:
+  Path 1: Both sbnum (Col 7) and cess (Col 11) present → all keys emitted.
+  Path 2: Both sbnum and cess blank → sbnum, sbdt, cess omitted.
+  Path 3: sbnum present, cess blank → sbnum/sbdt included, cess omitted.
+  Path 4: sbnum blank, cess present → sbnum/sbdt omitted, cess included.
+
+Fields are OMITTED when blank (not defaulted to 0 or empty string).
+
+================================================================================
+8. VBA WORKFLOW (BUTTONS)
+================================================================================
+
+"Validate" button:
+  start → getDataFromSheet → validate("VALID") → Calculate → writeDataToSheet
+  → complete. Shows record count.
+
+"Create File To Upload" button:
+  start → getDataFromSheet → validate("NOTVALID") → checkAndCreateJson →
+  writeDataToSheet → complete.
+  Checks GSTIN + From/To period error cells.
+  Then autoGenSerial → createJsonFile.
+  Prompts SaveAs dialog and creates .json file.
+
+================================================================================
+
+================================================================================
+APPENDIX A: GST PORTAL TUTORIAL LINK
+================================================================================
+
+Official Tutorial URL:
+https://tutorial.gst.gov.in/userguide/refund/Refund_on_Account_of_Supplies_made_to_SEZ_Unit__WPT_manual.htm
+
+Portal Workflow (summarised from tutorial.gst.gov.in):
+  1. Login to GST Portal → Services → Refunds → Application for Refund
+  2. Select the appropriate refund type from the dropdown
+  3. Select the Tax Period and click CREATE REFUND APPLICATION
+  4. IMPORTANT: All applicable returns (GSTR-1, GSTR-3B) must be filed
+     for the period before refund application can be created
+  5. Download the Offline Utility (.xlsb file) from the portal
+  6. Fill in the data in the Excel template
+  7. Click 'Validate & Calculate' to check for errors
+  8. Rectify any errors shown in the Error column
+  9. Click 'Create File To Upload' to generate the JSON file
+  10. Upload the JSON file on the GST Portal
+  11. Click 'Validate Statement' on the portal
+  12. If invalid documents exist, download error sheet, fix, re-upload
+  13. Once validated, proceed to fill refund computation table
+  14. Select bank account, upload supporting documents
+  15. Save the application (valid for 15 days)
+  16. File with DSC or EVC
+  17. ARN is generated and sent via email/SMS
+
+KEY PORTAL NOTES:
+  - System does NOT validate period of limitation (Section 54(1)).
+    Taxpayer must ensure filing within 2 years from relevant date.
+  - Same invoice cannot be reused in another refund application.
+  - If deficiency memo is issued or application withdrawn, invoices
+    become available for reuse.
+  - Up to 15 supporting documents (5 MB each) can be uploaded.
+  - Nil refund can be filed if no refund is to be claimed for a period.
+
+
+================================================================================
+APPENDIX B: FULL VBA CODE (VERBATIM FROM GOVERNMENT UTILITY)
+================================================================================
+
+================================================================================
+  VBA CODE EXTRACTION
+  Source   : GST_REFUND_S04.xlsb
+  Refund   : Refund of tax paid on supplies made to SEZ units/developer with payment of tax 
+  Exported : 2026-03-08 15:17:56
+  Modules  : 5 total (2 with code, 3 empty)
+================================================================================
+
+  TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+    1. ThisWorkbook.cls                         (Document Object (ThisWorkbook / Sheet))
+    2. Sheet1.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+    3. Module1.bas                              (Standard Module)
+    4. Sheet2.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+    5. Sheet3.cls                               (Document Object (ThisWorkbook / Sheet))  [empty]
+--------------------------------------------------------------------------------
+
+
+================================================================================
+  [1] ThisWorkbook.cls
+  Type        : Document Object (ThisWorkbook / Sheet)
+  Stream Path : VBA/ThisWorkbook
+================================================================================
+
+Private Sub Workbook_Open()
+Application.DisplayFullScreen = True
+Application.CommandBars("Full Screen").Visible = False
+
+Dim wSheetName As Worksheet
+For Each wSheetName In Worksheets
+wSheetName.Protect Password:="aN*4r!U5", UserInterFaceOnly:=True
+Next wSheetName
+
+End Sub
+
+Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+    'Target.Locked = False
+ Dim STARTROW, ENDROW, rowNo As Integer
+End Sub
+
+
+================================================================================
+  [2] Module1.bas
+  Type        : Standard Module
+  Stream Path : VBA/Module1
+================================================================================
+
+'Author Kayalvizhi
+'Date 15/12/2017
+
+Option Explicit
+
+Dim WS_DATA As Variant
+Dim STARTROW, ENDROW, LASTROW As Integer
+Dim DUPLICATE_REC As New Scripting.Dictionary
+Dim GSTIN_REGEX, INV_DATE_REGEX, RET_PRD_REGEX, INVOICE_REGEX, VALUE_REGEX, INV_REGEX, AMT_REGEX, SI_NO_REGEX, SHP_REGEX, FILE_TYPE, mm, yyyy, DocType As String
+Dim bIsNumeric, leapYear As Boolean
+Dim OBJ_RE As New VBScript_RegExp_55.RegExp
+
+Sub FullScreen()
+Application.DisplayFullScreen = True
+Application.CommandBars("Full Screen").Visible = False
+End Sub
+
+Sub ExitFullScreen()
+Application.DisplayFullScreen = False
+End Sub
+
+
+Sub CreateJson()
+
+ start
+ getDataFromSheet
+ 
+ validate ("NOTVALID")
+ checkAndCreateJson
+ 
+ writeDataToSheet
+ complete
+
+End Sub
+Sub ValidateJson()
+
+ start
+ getDataFromSheet
+  
+ validate ("VALID")
+ Calculate
+
+ writeDataToSheet
+ complete
+ 
+End Sub
+Function start()
+    Application.Interactive = False
+    Application.ScreenUpdating = False
+    Application.DisplayStatusBar = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    ActiveSheet.DisplayPageBreaks = False
+
+    GSTIN_REGEX = "[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$"
+    INV_DATE_REGEX = "[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$"
+    FILE_TYPE = "json"
+    RET_PRD_REGEX = "^[0-1]{1}[0-9]{1}[0-9]{4}$"
+    'RET_PRD_REGEX = "[0-1]{1}[0-9]{1}[0-9]{4}$"
+    INVOICE_REGEX = "^[a-zA-Z0-9\/-]{0,16}$"
+    SI_NO_REGEX = "^[0-9]{0,15}$"
+    VALUE_REGEX = "^([0-9]{0,15})([.][0-9]{0,2})?$"
+    AMT_REGEX = "^[0-9]{0,15}[.]{0,1}[0-9]{0,2}$"
+    INV_REGEX = "^[0\/-]{0,15}$"
+    'SHP_REGEX = "^[0-9]{3,7}$"
+    'SHP_REGEX = "^[ A-Za-z0-9()[\]+-*/%]$"
+     
+End Function
+
+
+Function getDataFromSheet()
+    Dim currentWS As Worksheet
+    Set currentWS = ActiveSheet
+    Dim lastCell As Range
+    
+        
+    With Sheets("RFD_STMT04")
+    Set lastCell = Range("A15:K10014").Find(What:="*", _
+                          After:=.Range("A15"), _
+                          Lookat:=xlPart, _
+                          LookIn:=xlFormulas, _
+                          SearchOrder:=xlByRows, _
+                          SearchDirection:=xlPrevious, _
+                          MatchCase:=False)
+    End With
+    
+    If lastCell Is Nothing Then
+        LASTROW = 14
+    Else
+        LASTROW = lastCell.Row
+    End If
+
+    If lastCell Is Nothing Then
+        STARTROW = 0
+        ENDROW = 0
+        WS_DATA = Null
+    Else
+        WS_DATA = currentWS.Range("A15:L" & LASTROW).Value
+        STARTROW = LBound(WS_DATA, 1)
+        ENDROW = UBound(WS_DATA, 1)
+    End If
+        
+    Set currentWS = Nothing
+End Function
+
+
+
+
+Function writeDataToSheet()
+    
+    Range("A15:L" & LASTROW).Value = WS_DATA
+    
+    'To Adjust COlumn I (Errors) height such that error messages are completely visible.
+    Columns("L:L").AutoFit
+    
+    'Select the cells which are below the last row containing value in coulmn A. Clear those selcted cells.
+    Range(Cells(LASTROW + 1, "L"), Cells(LASTROW + 1, "L").End(xlDown)).ClearContents
+    
+    
+End Function
+
+Function complete()
+
+    Application.Interactive = True
+    Application.ScreenUpdating = True
+    Application.DisplayStatusBar = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    ActiveSheet.DisplayPageBreaks = False
+End Function
+
+Function validate(msgFlag As Variant)
+ On Error GoTo ERR_HANDLER
+    OBJ_RE.Global = True
+    OBJ_RE.IgnoreCase = False
+
+    Dim totalRow, addCount, deleteCount, rowNo, inv_day, inv_month, inv_year As Integer
+    Dim key As String
+    Dim invoiceDate, StartDate, CurrentDate, FromDate, shpDate, ToDate, CreditNoteDate, DebitNoteDate As Date
+    Dim FromYear, FromMonth, Fromday, ToYear, ToMonth, Today As Long
+    Dim FromRetPer, ToRetPer As String
+    Dim MantissaMax, DecimalMax As Integer
+    Dim total_inv_month, total_inv_year As Integer
+    Dim IGSTVal, IGSTAmt, Cess, invVal, totalTaxValue, totalIntegratedTax, totalCess, igstDebit, cessDebit, igstCredit, cessCredit, netIgst, netCess As String
+       
+    leapYear = False
+    bIsNumeric = True
+    MantissaMax = 15
+    DecimalMax = 2
+     
+    addCount = 0
+    deleteCount = 0
+    invVal = 0
+    IGSTVal = 0
+    IGSTAmt = 0
+    Cess = 0
+    igstDebit = 0
+    cessDebit = 0
+    igstCredit = 0
+    cessCredit = 0
+    'netIgst = 0
+    'Dim netIgst As String
+    netIgst = 0
+    netCess = 0
+    
+    'Cells(11, "D") = ""
+    'Cells(11, "G") = ""
+    'Cells(11, "H") = ""
+    'Cells(11, "I") = ""
+    'Cells(11, "J") = ""
+    'Cells(11, "K") = ""
+    Cells(11, "F") = ""
+    Cells(11, "G") = ""
+    Cells(11, "J") = ""
+    Cells(11, "K") = ""
+    
+    StartDate = CDate(Format("2017-07-01", "yyyy-mm-dd"))
+    'CurrentDate = CDate(Format(Date, "mm-dd-yyyy"))
+    CurrentDate = CDate(Format(Now(), "yyyy-mm-dd"))
+    
+    'Check the regex pattern of the GSTIN
+    OBJ_RE.Pattern = GSTIN_REGEX
+    
+    Cells(6, "F") = ""
+    Cells(6, "E") = UCase(Cells(6, "E"))
+    Cells(6, "E") = Trim(Cells(6, "E"))
+    If Not OBJ_RE.Test(Cells(6, "E")) Then Cells(6, "F") = "GSTIN is not available/incorrect."
+    
+    If Cells(6, "E") = "" Then Cells(6, "F") = "Mandatory Field"
+    
+    'Check the regex pattern of the return period
+    OBJ_RE.Pattern = RET_PRD_REGEX
+    
+    Cells(7, "F") = ""
+   ' If Not OBJ_RE.Test(Cells(7, "C")) Then Cells(7, "D") = "From Return Period is invalid"
+    'If Cells(7, "E") = "" Then
+    'Cells(7, "F") = "Mandatory Field"
+    'End If
+    
+    
+    'Cells(8, "F") = ""
+    'If Cells(8, "E") = "" Then
+    'Cells(8, "F") = "Mandatory Field"
+    'GoTo SKIP_1
+    'End If
+    'Cells(8, "E") = Trim(Cells(8, "E"))
+         
+        ' If Not (Cells(7, "E") = "") Then
+        'Cells(7, "E") = Trim(Cells(7, "E"))
+    'If Not OBJ_RE.Test(Cells(7, "E")) Then
+    'Cells(7, "F") = "From Return Period is invalid"
+    'GoTo SKIP_1
+    'End If
+    
+   
+    'Cells(8, "E") = Trim(Cells(8, "E"))
+    'If Not OBJ_RE.Test(Cells(8, "E")) Then
+    'Cells(8, "F") = "To Return Period is invalid"
+    'GoTo SKIP_1
+    'End If
+    
+    
+    'From return period validator function
+    
+    FromRetPer = Cells(7, "E")
+    ToRetPer = Cells(8, "E")
+    
+   
+   ' If Not (IsNumeric(Cells(7, "E"))) Then
+    '        Cells(7, "F") = "From Return Period- Value should be numeric"
+     '       bIsNumeric = False
+      '      GoTo SKIP_1
+       ' End If
+    'If Not (IsNumeric(Cells(8, "E"))) Then
+     '       Cells(8, "F") = "To Period- Value should be numeric"
+      '      bIsNumeric = False
+       '     GoTo SKIP_1
+       ' End If
+   
+    FromMonth = Left(FromRetPer, 2)
+    FromYear = Right(FromRetPer, 4)
+    Fromday = 1
+    
+    ToMonth = Left(ToRetPer, 2)
+    ToYear = Right(ToRetPer, 4)
+    Today = 1
+   
+    If FromRetPer <> "" And bIsNumeric = True Then
+    FromDate = DateSerial(FromYear, FromMonth, Fromday)
+       
+        'If FromYear < 2017 Then
+         '   Cells(7, "F") = "From Return period cannot be earlier than 01-Jul-2017"
+          '  GoTo SKIP_1
+        'End If
+        
+        'If FromMonth > 12 Then
+         '   Cells(7, "F") = "Please enter valid From Return period"
+          '   GoTo SKIP_1
+        'End If
+        
+              
+        'If FromDate > CurrentDate Then
+        '    Cells(7, "F") = "From Return period cannot be future date"
+         '   GoTo SKIP_1
+        'End If
+        
+         'If FromDate < StartDate Then
+          '  Cells(7, "F") = "From Return period cannot be before 01-Jul-2017"
+           ' GoTo SKIP_1
+        'End If
+        
+         'If FromMonth < 0 Or FromMonth = 0 Then
+          '  Cells(7, "F") = "Please enter valid From Return period"
+           '  GoTo SKIP_1
+        'End If
+        
+        'If Not OBJ_RE.Test(Cells(7, "E")) Then
+        'Cells(7, "F") = "From Return Period is invalid"
+        'GoTo SKIP_1
+        'End If
+      End If
+      
+     If ToRetPer <> "" And bIsNumeric = True Then
+    ToDate = DateSerial(ToYear, ToMonth, Today)
+       
+       ' If ToYear < 2017 Then
+        '    Cells(8, "F") = "To Return period cannot be earlier than 01-Jul-2017"
+         '   GoTo SKIP_1
+        'End If
+        
+        'If ToMonth > 12 Then
+         '   Cells(8, "F") = "Please enter valid To Return period"
+          '   GoTo SKIP_1
+        'End If
+        
+              
+        'If ToDate > CurrentDate Then
+         '   Cells(8, "F") = "To Return period cannot be future date"
+          '  GoTo SKIP_1
+       ' End If
+        
+        ' If ToDate < StartDate Then
+         '   Cells(8, "F") = "To Return period cannot be before 01-Jul-2017"
+          '  GoTo SKIP_1
+        'End If
+        
+        ' If ToMonth < 0 Or ToMonth = 0 Then
+         '   Cells(8, "F") = "Please enter valid To Return period"
+          '   GoTo SKIP_1
+        'End If
+        
+        'If Not OBJ_RE.Test(Cells(8, "E")) Then
+        'Cells(8, "F") = "To Return Period is invalid"
+        'GoTo SKIP_1
+        'End If
+      End If
+     '
+      If ToDate < FromDate Then
+    'Cells(8, "F") = "To Return period cannot be less than From Return period"
+      '       GoTo SKIP_1
+       ' End If
+        End If
+              
+    If Not (STARTROW = 0 And ENDROW = 0) Then
+    For rowNo = STARTROW To ENDROW Step 1
+              
+        WS_DATA(rowNo, 12) = ""
+        'WS_DATA(rowNo, 14) = ""
+        'WS_DATA(rowNo, 15) = ""
+        
+        WS_DATA(rowNo, 2) = UCase(WS_DATA(rowNo, 2))
+        WS_DATA(rowNo, 4) = UCase(WS_DATA(rowNo, 4))
+        WS_DATA(rowNo, 8) = UCase(WS_DATA(rowNo, 8))
+        
+        OBJ_RE.Pattern = SI_NO_REGEX
+        
+        'If WS_DATA(rowNo, 1) = 0 Then
+          ' WS_DATA(rowNo, 12) = "Sr. No. cannot be zero"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not OBJ_RE.Test(WS_DATA(rowNo, 1)) Then
+           ' WS_DATA(rowNo, 12) = "Sr. No. field can take max 15 digits of +ve non decimal number only"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+          'Checks for empty cells
+        If WS_DATA(rowNo, 2) = "" Then
+            WS_DATA(rowNo, 12) = "Please enter GSTIN of Recipient."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        OBJ_RE.Pattern = GSTIN_REGEX
+        WS_DATA(rowNo, 2) = Trim(WS_DATA(rowNo, 2))
+        If Not OBJ_RE.Test(WS_DATA(rowNo, 2)) Then
+            WS_DATA(rowNo, 12) = "GSTIN is not available/incorrect."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        
+        If Cells(6, "E") = WS_DATA(rowNo, 2) Then
+        WS_DATA(rowNo, 12) = "GSTIN of Recipient and the Seller cannot be same."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If WS_DATA(rowNo, 3) = "" Then
+            WS_DATA(rowNo, 12) = "Please Select Type of Document."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 4) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Document Details No."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+       OBJ_RE.Pattern = INVOICE_REGEX
+        WS_DATA(rowNo, 4) = Trim(WS_DATA(rowNo, 4))
+         If OBJ_RE.Test(WS_DATA(rowNo, 4)) Then
+            OBJ_RE.Pattern = INV_REGEX
+               If WS_DATA(rowNo, 4) = 0 Or WS_DATA(rowNo, 4) = "/0" Then
+               WS_DATA(rowNo, 12) = "Document Details No cannot be 0 and special characters alone."
+               GoTo SKIP_FURTHER_VALIDATION
+               End If
+              If OBJ_RE.Test(WS_DATA(rowNo, 4)) Then
+              WS_DATA(rowNo, 12) = "Please enter valid Document Details No."
+              GoTo SKIP_FURTHER_VALIDATION
+              End If
+            Else
+            WS_DATA(rowNo, 12) = "Document Details No field can take max 16 digit value of alphanumeric and special character(/-)."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 5) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Document Details Date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If WS_DATA(rowNo, 6) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Document Details Value"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 6) < 0 Then
+            WS_DATA(rowNo, 12) = "Document Details Value cannot be negative"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+       
+         If Not (WS_DATA(rowNo, 8) = "") Then
+        If WS_DATA(rowNo, 7) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Shipping Bill/ Bill of export/ Endorsed invoice by SEZ- No."
+            GoTo SKIP_FURTHER_VALIDATION
+       End If
+        
+        
+         
+            OBJ_RE.Pattern = INVOICE_REGEX
+              If Not OBJ_RE.Test(WS_DATA(rowNo, 7)) Then
+               WS_DATA(rowNo, 12) = "Shipping bill No can take alphanumeric and special character(/-)only"
+               GoTo SKIP_FURTHER_VALIDATION
+               End If
+               End If
+        'WS_DATA(rowNo, 7) = Trim(WS_DATA(rowNo, 7))
+       'OBJ_RE.Pattern = SHP_REGEX
+        'If Not OBJ_RE.Test(WS_DATA(rowNo, 7)) Then
+            'WS_DATA(rowNo, 12) = "Please enter valid Shipping bill No."
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        If Not (WS_DATA(rowNo, 7) = "") Then
+        If WS_DATA(rowNo, 8) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Shipping Bill/ Bill of export/ Endorsed invoice by SEZ- Date."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        
+         If WS_DATA(rowNo, 9) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Taxable Value"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 10) = "" Then
+            WS_DATA(rowNo, 12) = "Please Enter Integrated Tax"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        'commented as per new refunds
+        'If WS_DATA(rowNo, 11) = "" Then
+           'WS_DATA(rowNo, 12) = "Please Enter Cess Amount"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+       ' If WS_DATA(rowNo, 10) = "" Then
+        '    WS_DATA(rowNo, 16) = "Please Enter Integrated Amount in debit note"
+         '   GoTo SKIP_FURTHER_VALIDATION
+       ' End If
+        
+        'If WS_DATA(rowNo, 11) = "" Then
+            'WS_DATA(rowNo, 16) = "Please Enter Cess Amount in debit note"
+           ' GoTo SKIP_FURTHER_VALIDATION
+       ' End If
+        
+        'If WS_DATA(rowNo, 12) = "" Then
+         '   WS_DATA(rowNo, 16) = "Please Enter Integrated Amount in credit note"
+          '  GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If WS_DATA(rowNo, 13) = "" Then
+            'WS_DATA(rowNo, 16) = "Please Enter Cess Amount in credit note"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'Check the regex pattern of the invoice date
+    OBJ_RE.Pattern = INV_DATE_REGEX
+        
+        'checks for valid values
+              
+        'Spaces in date field are trimmed and if "/" delimiter is used it is replaced to "-"
+        
+        WS_DATA(rowNo, 5) = Trim(WS_DATA(rowNo, 5))
+        WS_DATA(rowNo, 5) = Replace(WS_DATA(rowNo, 5), "/", "-")
+        
+        If Not OBJ_RE.Test(WS_DATA(rowNo, 5)) Then
+            WS_DATA(rowNo, 12) = "Please Enter Document Details Date in dd-mm-yyyy format"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        WS_DATA(rowNo, 8) = Trim(WS_DATA(rowNo, 8))
+        WS_DATA(rowNo, 8) = Replace(WS_DATA(rowNo, 8), "/", "-")
+        If Not (WS_DATA(rowNo, 7) = "") Then
+        If Not OBJ_RE.Test(WS_DATA(rowNo, 8)) Then
+            WS_DATA(rowNo, 12) = "Please Enter Shipping Bill Date in dd-mm-yyyy format"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        inv_day = Left(WS_DATA(rowNo, 5), 2)
+        inv_month = Mid(WS_DATA(rowNo, 5), 4, 2)
+        'inv_year = Mid(WS_DATA(rowNo, 3), 7, 4)
+        inv_year = Right(WS_DATA(rowNo, 5), 4)
+        total_inv_month = Mid(WS_DATA(rowNo, 5), 4, 2)
+        total_inv_year = Mid(WS_DATA(rowNo, 5), 7, 4)
+        invoiceDate = DateSerial(inv_year, inv_month, inv_day)
+        
+        If inv_year = 0 Then
+            WS_DATA(rowNo, 12) = "Please enter valid date for Document Details"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+
+        If inv_year < 2017 Then
+            WS_DATA(rowNo, 12) = "Document Date cannot be before 01-Jul-2017"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+                         
+          If inv_month > 12 Then
+            WS_DATA(rowNo, 12) = "Document Date cannot be before 01-Jul-2017 or Enter valid Date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If inv_month < 1 Then
+            WS_DATA(rowNo, 12) = "Please enter valid date for Document Details"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If inv_day < 1 Then
+             WS_DATA(rowNo, 12) = "Please Enter Document Details Date in dd-mm-yyyy format"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+       If (inv_month = 2) Then
+        leapYear = (Month(DateSerial(inv_year, 2, 29)) = 2)
+        If (leapYear = True) Then
+            If (inv_day > 29) Then
+                WS_DATA(rowNo, 12) = "Please enter valid date for Document Details Date"
+                GoTo SKIP_FURTHER_VALIDATION
+                End If
+            Else
+                If (inv_day > 28) Then
+                WS_DATA(rowNo, 12) = "Please enter valid date for Document Details Date"
+        GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        End If
+        
+    
+    Select Case inv_month
+    Case 1, 3, 5, 7, 8, 10, 12
+    If inv_day > 31 Then
+    WS_DATA(rowNo, 12) = "Please enter valid date for Document  details"
+    GoTo SKIP_FURTHER_VALIDATION
+    End If
+    Case 4, 6, 9, 11
+    If inv_day > 30 Then
+    WS_DATA(rowNo, 12) = "Please enter valid date for Document  details"
+    GoTo SKIP_FURTHER_VALIDATION
+    End If
+    End Select
+      
+        If invoiceDate > CurrentDate Then
+            WS_DATA(rowNo, 12) = "Future date is not allowed for Document Details"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If invoiceDate < StartDate Then
+             WS_DATA(rowNo, 12) = "Document Date cannot be before 01-Jul-2017"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        'commented as per CR_11636_Impact of SR_Refund Changes
+        
+        'If inv_month > ToMonth And inv_year > ToYear Then
+             'WS_DATA(rowNo, 12) = "Document Details Date cannot be greater than To Return period"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If inv_month > ToMonth And inv_year = ToYear Then
+         '    WS_DATA(rowNo, 12) = "Document Details Date cannot be greater than To Return period"
+         '   GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If inv_month = ToMonth And inv_year > ToYear Then
+          '   WS_DATA(rowNo, 12) = "Document Details Date cannot be greater than To Return period"
+           'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If inv_month < ToMonth And inv_year > ToYear Then
+         '    WS_DATA(rowNo, 12) = "Document Details Date cannot be greater than To Return period"
+          '  GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        If Not (WS_DATA(rowNo, 8) = "") Then
+        inv_day = Left(WS_DATA(rowNo, 8), 2)
+        inv_month = Mid(WS_DATA(rowNo, 8), 4, 2)
+        inv_year = Right(WS_DATA(rowNo, 8), 4)
+        shpDate = DateSerial(inv_year, inv_month, inv_day)
+
+        'If inv_year < 2017 Then
+          '  WS_DATA(rowNo, 16) = "Shipping Bill Date cannot be earlier than 01-Jul-2017"
+           ' GoTo SKIP_FURTHER_VALIDATION
+       ' End If
+       
+        If inv_year = 0 Then
+            WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If inv_month > 12 Then
+            WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If inv_month < 1 Then
+            WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        If Not (WS_DATA(rowNo, 7) = " ") Then
+        If inv_day < 1 Then
+            WS_DATA(rowNo, 12) = "Please Enter Shipping Bill date in dd-mm-yyyy format"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        
+       If (inv_month = 2) Then
+        leapYear = (Month(DateSerial(inv_year, 2, 29)) = 2)
+        If (leapYear = True) Then
+        If (inv_day > 29) Then
+        WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill"
+        GoTo SKIP_FURTHER_VALIDATION
+        End If
+            Else
+                If (inv_day > 28) Then
+                WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill details date"
+                GoTo SKIP_FURTHER_VALIDATION
+                End If
+        End If
+        End If
+        End If
+        
+    
+    Select Case inv_month
+    Case 1, 3, 5, 7, 8, 10, 12
+    If inv_day > 31 Then
+    WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill details"
+    GoTo SKIP_FURTHER_VALIDATION
+    End If
+    Case 4, 6, 9, 11
+    If inv_day > 30 Then
+    WS_DATA(rowNo, 12) = "Please enter valid date for Shipping Bill details"
+    GoTo SKIP_FURTHER_VALIDATION
+    End If
+    End Select
+      
+        
+        If shpDate > CurrentDate Then
+            WS_DATA(rowNo, 12) = "Shipping bill Date cannot be future date"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        'If shpDate < StartDate Then
+          '  WS_DATA(rowNo, 16) = "Shipping bill Date cannot be before 01-Jul-2017"
+           ' GoTo SKIP_FURTHER_VALIDATION
+       ' End If
+        
+        
+        'Numeric Value checks
+     OBJ_RE.Pattern = VALUE_REGEX
+                 
+        If Not (IsNumeric(WS_DATA(rowNo, 6))) Then
+            WS_DATA(rowNo, 12) = "Document Details Value should be numeric"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Not OBJ_RE.Test(WS_DATA(rowNo, 6)) Then
+            WS_DATA(rowNo, 12) = "Document Details Value can take only 15 +ve digits numeric value followed by 2 decimal value."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Right(WS_DATA(rowNo, 6), 1) = "." Then
+            WS_DATA(rowNo, 6) = WS_DATA(rowNo, 6) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Invoice value"
+            'GoTo SKIP_FURTHER_VALIDATION
+        End If
+               
+        If Not (IsNumeric(WS_DATA(rowNo, 9))) Then
+            WS_DATA(rowNo, 12) = "Taxable Value should be numeric"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If Not OBJ_RE.Test(WS_DATA(rowNo, 9)) Then
+             WS_DATA(rowNo, 12) = "Taxable value can take only 15 +ve digits numeric value followed by 2 decimal value."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Right(WS_DATA(rowNo, 9), 1) = "." Then
+            WS_DATA(rowNo, 9) = WS_DATA(rowNo, 9) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Integrated Taxable value"
+            'GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Not (IsNumeric(WS_DATA(rowNo, 10))) Then
+            WS_DATA(rowNo, 12) = "Integrated Tax should be numeric"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+         If Not OBJ_RE.Test(WS_DATA(rowNo, 10)) Then
+            WS_DATA(rowNo, 12) = "Integrated Tax can take only 15 +ve digits numeric value followed by 2 decimal value."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Right(WS_DATA(rowNo, 10), 1) = "." Then
+            WS_DATA(rowNo, 10) = WS_DATA(rowNo, 10) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Integrated Tax- Amt"
+            'GoTo SKIP_FURTHER_VALIDATION
+        End If
+                    
+        If Not WS_DATA(rowNo, 11) = "" Then
+        If Not (IsNumeric(WS_DATA(rowNo, 11))) Then
+            WS_DATA(rowNo, 12) = "Cess amount should be numeric"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Not OBJ_RE.Test(WS_DATA(rowNo, 11)) Then
+            WS_DATA(rowNo, 12) = "Cess amount can take only 15 +ve digits numeric value followed by 2 decimal value."
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If Right(WS_DATA(rowNo, 11), 1) = "." Then
+            WS_DATA(rowNo, 11) = WS_DATA(rowNo, 11) + "00"
+            WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Cess amount"
+            'GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        'code commented as per CR
+        'If Not (IsNumeric(WS_DATA(rowNo, 10))) Then
+            'WS_DATA(rowNo, 16) = "Integrated Tax in debit note should be numeric"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not OBJ_RE.Test(WS_DATA(rowNo, 10)) Then
+            'WS_DATA(rowNo, 16) = "Integrated Tax in debit can take only 15 +ve digits numeric value followed by 2 decimal value."
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If Right(WS_DATA(rowNo, 10), 1) = "." Then
+            'WS_DATA(rowNo, 10) = WS_DATA(rowNo, 10) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Integrated Tax in debit note"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If Not WS_DATA(rowNo, 11) = "" Then
+         'If Not (IsNumeric(WS_DATA(rowNo, 11))) Then
+           ' WS_DATA(rowNo, 16) = "Cess in debit note should be numeric"
+           ' GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not OBJ_RE.Test(WS_DATA(rowNo, 11)) Then
+           ' WS_DATA(rowNo, 16) = "Cess in debit can take only 15 +ve digits numeric value followed by 2 decimal value."
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If Right(WS_DATA(rowNo, 11), 1) = "." Then
+            'WS_DATA(rowNo, 11) = WS_DATA(rowNo, 11) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Cess in debit note"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        'End If
+        
+        'If Not (IsNumeric(WS_DATA(rowNo, 12))) Then
+            'WS_DATA(rowNo, 16) = "Integrated Tax in credit note should be numeric"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not OBJ_RE.Test(WS_DATA(rowNo, 12)) Then
+            'WS_DATA(rowNo, 16) = "Integrated Tax in credit can take only 15 +ve digits numeric value followed by 2 decimal value."
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If Right(WS_DATA(rowNo, 12), 1) = "." Then
+            'WS_DATA(rowNo, 12) = WS_DATA(rowNo, 12) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Integrated Tax in credit note"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not WS_DATA(rowNo, 13) = "" Then
+         'If Not (IsNumeric(WS_DATA(rowNo, 13))) Then
+            'WS_DATA(rowNo, 16) = "Cess Tax in credit note should be numeric"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not OBJ_RE.Test(WS_DATA(rowNo, 13)) Then
+            'WS_DATA(rowNo, 16) = "Cess in credit can take only 15 +ve digits numeric value followed by 2 decimal value."
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If Right(WS_DATA(rowNo, 13), 1) = "." Then
+            'WS_DATA(rowNo, 13) = WS_DATA(rowNo, 13) + "00"
+            'WS_DATA(rowNo, 16) = "Please enter two digit numeric value after decimal point in Cess in credit note"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        'End If
+     
+        
+        'Negative amount checks
+         If WS_DATA(rowNo, 6) < 0 Then
+            WS_DATA(rowNo, 12) = "Document Details Value should be greater than or equal to zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+          If WS_DATA(rowNo, 6) = 0 Then
+            WS_DATA(rowNo, 12) = "Document Details Value cannot be zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 9) < 0 Then
+            WS_DATA(rowNo, 12) = "Taxable Value should be greater than or equal to zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 9) = 0 Then
+            WS_DATA(rowNo, 12) = "Taxable Value cannot be zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+        If WS_DATA(rowNo, 10) < 0 Then
+            WS_DATA(rowNo, 12) = "Integrated Tax should be greater than or equal to zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        
+       ' If WS_DATA(rowNo, 10) = 0 Then
+        '    WS_DATA(rowNo, 12) = "Integrated Tax cannot be zero"
+           ' GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        If Not WS_DATA(rowNo, 11) = "" Then
+        If WS_DATA(rowNo, 11) < 0 Then
+            WS_DATA(rowNo, 12) = "Cess should be greater than or equal to zero"
+            GoTo SKIP_FURTHER_VALIDATION
+        End If
+        End If
+        
+        'If WS_DATA(rowNo, 10) < 0 Then
+         '   WS_DATA(rowNo, 16) = "Integrated Tax in debit note should be greater than or equal to zero"
+          '  GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not WS_DATA(rowNo, 11) = "" Then
+        'If WS_DATA(rowNo, 11) < 0 Then
+           ' WS_DATA(rowNo, 16) = "Cess in debit note should be greater than or equal to zero"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        'End If
+        
+        'If WS_DATA(rowNo, 12) < 0 Then
+            'WS_DATA(rowNo, 16) = "Integrated Tax in credit note should be greater than or equal to zero"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+         'If Not WS_DATA(rowNo, 13) = "" Then
+        'If WS_DATA(rowNo, 13) < 0 Then
+            'WS_DATA(rowNo, 16) = "Cess in credit note should be greater than or equal to zero"
+            'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        'End If
+            
+            
+    
+      
+        
+        
+        
+  
+                        
+        'Net Integrated Tax calculation
+        
+        Dim Cell14 As String
+        Dim Cell15 As String
+        
+        'If WS_DATA(rowNo, 8) <> "" And WS_DATA(rowNo, 10) <> "" And WS_DATA(rowNo, 12) <> "" Then
+        'WS_DATA(rowNo, 14) = (CDec(WS_DATA(rowNo, 8) + CDec(WS_DATA(rowNo, 10))) - CDec(WS_DATA(rowNo, 12)))
+        'End If
+        
+        'If WS_DATA(rowNo, 10) = "" And WS_DATA(rowNo, 12) = "" Then
+        'WS_DATA(rowNo, 14) = CDec(WS_DATA(rowNo, 8))
+        'End If
+        
+        'If WS_DATA(rowNo, 10) <> "" And WS_DATA(rowNo, 12) = "" Then
+        'WS_DATA(rowNo, 14) = CDec(WS_DATA(rowNo, 8)) + CDec(WS_DATA(rowNo, 10))
+        'End If
+        
+        'If WS_DATA(rowNo, 10) = "" And WS_DATA(rowNo, 12) <> "" Then
+        'WS_DATA(rowNo, 14) = CDec(WS_DATA(rowNo, 8)) - CDec(WS_DATA(rowNo, 12))
+        'End If
+       
+              
+        'WS_DATA(rowNo, 14) = (CDec(WS_DATA(rowNo, 8) + CDec(WS_DATA(rowNo, 10))) - CDec(WS_DATA(rowNo, 12)))
+        'If WS_DATA(rowNo, 14) < 0 Then
+        'WS_DATA(rowNo, 16) = "Net Integrated Tax/Cess cannot be negative."
+        'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'Cell14 = Int(WS_DATA(rowNo, 14) * 100) / 100
+        'WS_DATA(rowNo, 14) = Cell14
+        
+        'If (WS_DATA(rowNo, 9)) <> "" And (WS_DATA(rowNo, 11)) <> "" And (WS_DATA(rowNo, 13)) <> "" Then
+        'WS_DATA(rowNo, 15) = (CDec(WS_DATA(rowNo, 9) + CDec(WS_DATA(rowNo, 11))) - CDec(WS_DATA(rowNo, 13)))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) = "" And (WS_DATA(rowNo, 11)) <> "" And (WS_DATA(rowNo, 13)) <> "" Then
+        'WS_DATA(rowNo, 15) = CDec(WS_DATA(rowNo, 11)) - CDec(WS_DATA(rowNo, 13))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) = "" And (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 13)) <> "" Then
+        'WS_DATA(rowNo, 15) = 0 - CDec(WS_DATA(rowNo, 13))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) = "" And (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 13)) = "" Then
+        'WS_DATA(rowNo, 15) = 0
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) <> "" And (WS_DATA(rowNo, 11)) <> "" And (WS_DATA(rowNo, 13)) = "" Then
+        'WS_DATA(rowNo, 15) = (CDec(WS_DATA(rowNo, 9)) + CDec(WS_DATA(rowNo, 11)))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) <> "" And (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 13)) <> "" Then
+        'WS_DATA(rowNo, 15) = (CDec(WS_DATA(rowNo, 9)) - CDec(WS_DATA(rowNo, 13)))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) = "" And (WS_DATA(rowNo, 11)) <> "" And (WS_DATA(rowNo, 13)) = "" Then
+        'WS_DATA(rowNo, 15) = CDec(WS_DATA(rowNo, 11))
+        'End If
+        
+        'If (WS_DATA(rowNo, 9)) <> "" And (WS_DATA(rowNo, 11)) = "" And (WS_DATA(rowNo, 13)) = "" Then
+        'WS_DATA(rowNo, 15) = CDec(WS_DATA(rowNo, 9))
+        'End If
+                       
+        'If WS_DATA(rowNo, 15) < 0 Then
+        'WS_DATA(rowNo, 16) = "Net Integrated Tax/Cess cannot be negative."
+        'GoTo SKIP_FURTHER_VALIDATION
+        'End If
+        
+        'If WS_DATA(rowNo, 15) <> 0 And WS_DATA(rowNo, 15) <> "" Then
+        'Cell15 = Int(WS_DATA(rowNo, 15) * 100) / 100
+        'WS_DATA(rowNo, 15) = Cell15
+        'End If
+        
+        
+         'Total to be displayed
+         
+         Dim ival, igval, igamt, ces, igdb, cesdb, igcr, cescr, netig, netces As String
+         
+         If Not WS_DATA(rowNo, 6) = "" Then
+            invVal = CDec(invVal) + CDec(WS_DATA(rowNo, 6))
+            Cells(11, "F") = Int(invVal * 100) / 100
+            Cells(11, "F") = CStr(invVal)
+            End If
+                        
+                        
+             If Not WS_DATA(rowNo, 9) = "" Then
+            totalTaxValue = CDec(totalTaxValue) + CDec(WS_DATA(rowNo, 9))
+            Cells(11, "I") = Int(totalTaxValue * 100) / 100
+            Cells(11, "I") = CStr(totalTaxValue)
+            End If
+            
+            
+             If Not WS_DATA(rowNo, 10) = "" Then
+            totalIntegratedTax = CDec(totalIntegratedTax) + CDec(WS_DATA(rowNo, 10))
+            Cells(11, "J") = Int(totalIntegratedTax * 100) / 100
+            Cells(11, "J") = CStr(totalIntegratedTax)
+            End If
+            
+            If Not WS_DATA(rowNo, 11) = "" Then
+            totalCess = CDec(totalCess) + CDec(WS_DATA(rowNo, 11))
+            Cells(11, "K") = Int(totalCess * 100) / 100
+            Cells(11, "K") = CStr(totalCess)
+            End If
+                        
+             'commented as per CR_11636
+            'If Not WS_DATA(rowNo, 7) = "" Then
+            'IGSTVal = CDec(IGSTVal) + CDec(WS_DATA(rowNo, 7))
+            'Cells(11, "G") = Int(IGSTVal * 100) / 100
+            'Cells(11, "G") = CStr(IGSTVal)
+            'End If
+                        
+            'If Not WS_DATA(rowNo, 8) = "" Then
+            'IGSTAmt = CDec(IGSTAmt) + CDec(WS_DATA(rowNo, 8))
+            'Cells(11, "H") = Int(IGSTAmt * 100) / 100
+            'Cells(11, "H") = CStr(IGSTAmt)
+            'End If
+                       
+            'If Not WS_DATA(rowNo, 9) = "" Then
+            'Cess = CDec(Cess) + CDec(WS_DATA(rowNo, 9))
+            'Cells(11, "I") = Int(Cess * 100) / 100
+            'Cells(11, "I") = CStr(Cess)
+            'End If
+                       
+            'If Not WS_DATA(rowNo, 10) = "" Then
+            'igstDebit = CDec(igstDebit) + CDec(WS_DATA(rowNo, 10))
+            'Cells(11, "J") = Int(igstDebit * 100) / 100
+            'Cells(11, "J") = CStr(igstDebit)
+            'End If
+                                    
+            'If Not WS_DATA(rowNo, 11) = "" Then
+            'cessDebit = CDec(cessDebit) + CDec(WS_DATA(rowNo, 11))
+            'Cells(11, "K") = Int(cessDebit * 100) / 100
+            'Cells(11, "K") = CStr(cessDebit)
+            'End If
+                        
+            'If Not WS_DATA(rowNo, 12) = "" Then
+            'igstCredit = CDec(igstCredit) + CDec(WS_DATA(rowNo, 12))
+            'Cells(11, "L") = Int(igstCredit * 100) / 100
+            'Cells(11, "L") = CStr(igstCredit)
+            'End If
+                       
+            'If Not WS_DATA(rowNo, 13) = "" Then
+            'cessCredit = CDec(cessCredit) + CDec(WS_DATA(rowNo, 13))
+            'Cells(11, "M") = Int(cessCredit * 100) / 100
+            'Cells(11, "M") = CStr(cessCredit)
+            'End If
+            
+            
+            'If Not WS_DATA(rowNo, 14) = "" Then
+            'netIgst = CDec(netIgst) + CDec(WS_DATA(rowNo, 14))
+            'netIgst = Int(netIgst * 100) / 100
+            'Cells(11, "N") = CStr(netIgst)
+            'End If
+            
+            'If Not WS_DATA(rowNo, 15) = "" Then
+            'netCess = CDec(netCess) + CDec(WS_DATA(rowNo, 15))
+            'Cells(11, "O") = Int(netCess * 100) / 100
+            'Cells(11, "O") = CStr(netCess)
+            'End If
+         
+      
+      'Duplication Check
+                        
+      DocType = Right(WS_DATA(rowNo, 3), 4)
+  If total_inv_month > 0 And total_inv_month < 4 Then
+             total_inv_year = total_inv_year - 1
+             key = DocType & "_" & WS_DATA(rowNo, 4) & "_" & total_inv_year
+        Else
+            key = DocType & "_" & WS_DATA(rowNo, 4) & "_" & total_inv_year
+        End If
+
+    'declare doctype as string
+     
+       
+        If DUPLICATE_REC.Exists(key) Then
+            WS_DATA(rowNo, 12) = "Document No. with Duplicate Entry in row Number " & (DUPLICATE_REC.Item(key) + 14)
+        
+        Else
+            DUPLICATE_REC.Add key, rowNo
+        End If
+        
+        
+        
+SKIP_FURTHER_VALIDATION:
+  
+    Next
+    End If
+    
+    If msgFlag = "VALID" Then
+        MsgBox "" & LASTROW - 14 & " records in this sheet"
+    End If
+    
+    Set DUPLICATE_REC = Nothing
+    
+     'Exit Function
+    
+SKIP_1:
+    Exit Function
+    
+ERR_HANDLER:
+    MsgBox "Error Encountered"
+         
+    
+End Function
+Sub autoGenSerial()
+
+    Dim serialNo As Integer
+    Dim Row As Integer
+    
+    serialNo = 1
+        
+    For Row = STARTROW To ENDROW
+        'Debug.Print WS_DATA(Row, 2)
+        
+        If WS_DATA(Row, 2) <> "" Then
+           WS_DATA(Row, 1) = serialNo
+           serialNo = serialNo + 1
+        End If
+    Next Row
+        
+End Sub
+
+Function checkAndCreateJson()
+    Dim errorCount, addCount, rowNo As Integer
+    Dim errMsg As String
+    
+    errMsg = " Exists in the sheet. Please click Create File To Upload after resolving the errors"
+
+    addCount = 0
+      
+If Not (STARTROW = 0 And ENDROW = 0) Then
+    For rowNo = STARTROW To ENDROW Step 1
+  
+        If Not WS_DATA(rowNo, 12) = "" Then
+            errorCount = errorCount + 1
+        End If
+    
+    Next
+End If
+      
+If (STARTROW = 0 And ENDROW = 0) Then
+        MsgBox "Please type atleast one record to create file to upload", vbCritical
+    ElseIf errorCount = 0 Then
+    
+        If Cells(6, "F") <> "" Or Cells(7, "F") <> "" Or Cells(8, "F") <> "" Then
+            MsgBox "Valid GSTIN is Mandatory", vbCritical
+        'ElseIf Cells(7, "F") <> "" Then
+         '       MsgBox "Valid From Return Period is Mandatory", vbCritical
+        'ElseIf Cells(8, "F") <> "" Then
+         '       MsgBox "Valid To Return Period is Mandatory", vbCritical
+        Else
+            autoGenSerial
+            createJsonFile
+        End If
+    
+    ElseIf errorCount = 1 Then
+        MsgBox errorCount & " error" & errMsg, vbCritical
+    Else
+        MsgBox errorCount & " errors" & errMsg, vbCritical
+    End If
+    
+End Function
+
+Function createJsonFile()
+    Dim rowNo As Integer
+    Dim path, json As String
+    Dim fs As Object, jsonfile
+    Dim row9, row10, row11, row12, row13, row15 As Double
+    
+  
+    path = Application.GetSaveAsFilename
+  
+    If path <> "False" Then
+  
+        Set fs = CreateObject("Scripting.FileSystemObject")
+    
+        path = path + FILE_TYPE
+        Set jsonfile = fs.CreateTextFile(path, True)
+
+        jsonfile.Write ("{""gstin"":""")
+        jsonfile.Write (Cells(6, "E"))
+        'jsonfile.Write (""",""fromFp"":""")
+        'jsonfile.Write (Cells(7, "E"))
+        'jsonfile.Write (""",""toFp"":""")
+        'jsonfile.Write (Cells(8, "E"))
+        jsonfile.Write (""",""refundRsn"":""")
+        jsonfile.Write ("SEZWP")
+'Date 25/04/2025
+'version: 3
+        jsonfile.Write (""",""version"":""")
+        jsonfile.Write ("3.0")
+        jsonfile.Write (""",""stmt04"":[{")
+            
+        For rowNo = STARTROW To ENDROW Step 1
+        
+        If (WS_DATA(rowNo, 9)) = "" Then
+        row9 = 0
+        Else
+        row9 = WS_DATA(rowNo, 9)
+        End If
+        
+        'commented as per CR_11636
+        
+        'If (WS_DATA(rowNo, 10)) = "" Then
+        'row10 = 0
+        'Else
+        'row10 = WS_DATA(rowNo, 10)
+        'End If
+        
+        'If (WS_DATA(rowNo, 11)) = "" Then
+        'row11 = 0
+        'Else
+        'row11 = WS_DATA(rowNo, 11)
+        'End If
+        
+        'If (WS_DATA(rowNo, 12)) = "" Then
+        'row12 = 0
+        'Else
+        'row12 = WS_DATA(rowNo, 12)
+        'End If
+        
+       ' If (WS_DATA(rowNo, 13)) = "" Then
+        'row13 = 0
+        'Else
+        'row13 = WS_DATA(rowNo, 13)
+        'End If
+        
+        'If (WS_DATA(rowNo, 15)) = "" Then
+        'row15 = 0
+        'Else
+        'row15 = WS_DATA(rowNo, 15)
+        'End If
+        If Not (WS_DATA(rowNo, 7) = "") And Not (WS_DATA(rowNo, 11) = "") Then
+        json = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""rGstin"":""") & (WS_DATA(rowNo, 2)) & (""",""docType"":""") & (WS_DATA(rowNo, 3)) & (""",""inum"":""") & (WS_DATA(rowNo, 4)) & (""",""idt"":""") & (WS_DATA(rowNo, 5)) & (""",""val"":") & (WS_DATA(rowNo, 6)) & (",""sbnum"":""") & (WS_DATA(rowNo, 7)) & (""",""sbdt"":""") & (WS_DATA(rowNo, 8)) & (""",""txval"":") & (WS_DATA(rowNo, 9)) & (",""iamt"":") & (WS_DATA(rowNo, 10)) & (",""cess"":") & (WS_DATA(rowNo, 11)))
+        'Else
+           End If
+                     
+          If (WS_DATA(rowNo, 11) = "") And (WS_DATA(rowNo, 7) = "") Then
+          json = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""rGstin"":""") & (WS_DATA(rowNo, 2)) & (""",""docType"":""") & (WS_DATA(rowNo, 3)) & (""",""inum"":""") & (WS_DATA(rowNo, 4)) & (""",""idt"":""") & (WS_DATA(rowNo, 5)) & (""",""val"":") & (WS_DATA(rowNo, 6)) & (",""txval"":") & (WS_DATA(rowNo, 9)) & (",""iamt"":") & (WS_DATA(rowNo, 10)))
+          End If
+          
+          If Not (WS_DATA(rowNo, 7) = "") And WS_DATA(rowNo, 11) = "" Then
+        json = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""rGstin"":""") & (WS_DATA(rowNo, 2)) & (""",""docType"":""") & (WS_DATA(rowNo, 3)) & (""",""inum"":""") & (WS_DATA(rowNo, 4)) & (""",""idt"":""") & (WS_DATA(rowNo, 5)) & (""",""val"":") & (WS_DATA(rowNo, 6)) & (",""sbnum"":""") & (WS_DATA(rowNo, 7)) & (""",""sbdt"":""") & (WS_DATA(rowNo, 8)) & (""",""txval"":") & (WS_DATA(rowNo, 9)) & (",""iamt"":") & (WS_DATA(rowNo, 10)))
+          End If
+           If (WS_DATA(rowNo, 7) = "") And Not (WS_DATA(rowNo, 11) = "") Then
+           json = (("""sno"":") & (WS_DATA(rowNo, 1)) & (",""rGstin"":""") & (WS_DATA(rowNo, 2)) & (""",""docType"":""") & (WS_DATA(rowNo, 3)) & (""",""inum"":""") & (WS_DATA(rowNo, 4)) & (""",""idt"":""") & (WS_DATA(rowNo, 5)) & (""",""val"":") & (WS_DATA(rowNo, 6)) & (",""txval"":") & (WS_DATA(rowNo, 9)) & (",""iamt"":") & (WS_DATA(rowNo, 10)) & (",""cess"":") & (WS_DATA(rowNo, 11)))
+          End If
+          
+            If rowNo = ENDROW Then
+                json = json & ("}")
+            Else
+                json = json & ("},{")
+            End If
+            
+            jsonfile.Write json
+            
+        Next
+
+        jsonfile.Write ("]}")
+
+        jsonfile.Close
+
+        MsgBox "File has been created and placed in  " & path & "  ! You may now proceed to upload the File in the GST Web Portal", vbInformation
+        
+        Set fs = Nothing
+        Set jsonfile = Nothing
+        
+    End If
+
+End Function
+
+
+================================================================================
+  END OF VBA EXTRACTION
+  2 module(s) with code exported
+  3 empty module(s) listed in TOC only
+================================================================================
+
+================================================================================
+
+
+================================================================================
+APPENDIX C: COMPLETE ERROR MESSAGE CATALOG — S04
+================================================================================
+
+Error column in this utility: L (Col 12)
+
+This is the exhaustive list of every error message that the VBA validation
+engine can produce. Use this as the validation specification for your app —
+each error message maps to a specific validation rule that must be implemented.
+
+--------------------------------------------------------------------------------
+C.1  HEADER-LEVEL ERRORS (Top Section — GSTIN, Return Period, etc.)
+--------------------------------------------------------------------------------
+
+  [Row 6, Col F]  "GSTIN is not available/incorrect."
+  [Row 6, Col F]  "Mandatory Field"
+  [Row 7, Col D]  "From Return Period is invalid"
+  [Row 8, Col F]  "To Return Period is invalid"
+  [Row 7, Col F]  "From Return Period- Value should be numeric"
+  [Row 8, Col F]  "To Period- Value should be numeric"
+  [Row 7, Col F]  "From Return period cannot be earlier than 01-Jul-2017"
+  [Row 7, Col F]  "Please enter valid From Return period"
+  [Row 7, Col F]  "From Return period cannot be future date"
+  [Row 7, Col F]  "From Return period cannot be before 01-Jul-2017"
+  [Row 8, Col F]  "To Return period cannot be earlier than 01-Jul-2017"
+  [Row 8, Col F]  "Please enter valid To Return period"
+  [Row 8, Col F]  "To Return period cannot be future date"
+  [Row 8, Col F]  "To Return period cannot be before 01-Jul-2017"
+  [Row 8, Col F]  "To Return period cannot be less than From Return period"
+
+--------------------------------------------------------------------------------
+C.2  ROW-LEVEL VALIDATION ERRORS (Data Entry Grid)
+--------------------------------------------------------------------------------
+
+  C.2.1  SERIAL NUMBER
+  ~~~~~~~~~~~~~~~~~~~~~
+    → "Sr. No. cannot be zero"
+    → "Sr. No. field can take max 15 digits of +ve non decimal number only"
+
+  C.2.2  GSTIN / SUPPLIER
+  ~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please enter GSTIN of Recipient."
+    → "GSTIN is not available/incorrect."
+    → "GSTIN of Recipient and the Seller cannot be same."
+
+  C.2.3  DOCUMENT TYPE
+  ~~~~~~~~~~~~~~~~~~~~~
+    → "Please Select Type of Document."
+
+  C.2.4  DOCUMENT NUMBER / INVOICE NO
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Document No. with Duplicate Entry in row Number"
+
+  C.2.5  DOCUMENT DATE
+  ~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Document Details Date"
+    → "Please Enter Shipping Bill/ Bill of export/ Endorsed invoice by SEZ- Date."
+    → "Please Enter Document Details Date in dd-mm-yyyy format"
+    → "Please Enter Shipping Bill Date in dd-mm-yyyy format"
+    → "Please enter valid date for Document Details"
+    → "Document Date cannot be before 01-Jul-2017"
+    → "Document Date cannot be before 01-Jul-2017 or Enter valid Date"
+    → "Please enter valid date for Document Details Date"
+    → "Please enter valid date for Document  details"
+    → "Future date is not allowed for Document Details"
+    → "Document Details Date cannot be greater than To Return period"
+    → "Shipping Bill Date cannot be earlier than 01-Jul-2017"
+    → "Please enter valid date for Shipping Bill date"
+    → "Please Enter Shipping Bill date in dd-mm-yyyy format"
+    → "Please enter valid date for Shipping Bill"
+    → "Please enter valid date for Shipping Bill details date"
+    → "Please enter valid date for Shipping Bill details"
+    → "Shipping bill Date cannot be future date"
+    → "Shipping bill Date cannot be before 01-Jul-2017"
+
+  C.2.6  DOCUMENT VALUE / TAXABLE VALUE
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Document Details No field can take max 16 digit value of alphanumeric and special character(/-)."
+    → "Please Enter Document Details Value"
+    → "Document Details Value cannot be negative"
+    → "Please Enter Taxable Value"
+    → "Document Details Value should be numeric"
+    → "Document Details Value can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Invoice value"
+    → "Taxable Value should be numeric"
+    → "Taxable value can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Integrated Taxable value"
+    → "Integrated Tax can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Integrated Tax- Amt"
+    → "Cess amount can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Cess amount"
+    → "Integrated Tax in debit can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Integrated Tax in debit note"
+    → "Cess in debit can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Cess in debit note"
+    → "Integrated Tax in credit can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Integrated Tax in credit note"
+    → "Cess in credit can take only 15 +ve digits numeric value followed by 2 decimal value."
+    → "Please enter two digit numeric value after decimal point in Cess in credit note"
+    → "Document Details Value should be greater than or equal to zero"
+    → "Document Details Value cannot be zero"
+    → "Taxable Value should be greater than or equal to zero"
+    → "Taxable Value cannot be zero"
+
+  C.2.7  TAX AMOUNTS (IGST/CGST/SGST/CESS)
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Integrated Tax"
+    → "Please Enter Cess Amount"
+    → "Please Enter Cess Amount in debit note"
+    → "Please Enter Cess Amount in credit note"
+    → "Integrated Tax should be numeric"
+    → "Cess amount should be numeric"
+    → "Integrated Tax in debit note should be numeric"
+    → "Cess in debit note should be numeric"
+    → "Integrated Tax in credit note should be numeric"
+    → "Cess Tax in credit note should be numeric"
+    → "Integrated Tax should be greater than or equal to zero"
+    → "Integrated Tax cannot be zero"
+    → "Cess should be greater than or equal to zero"
+    → "Integrated Tax in debit note should be greater than or equal to zero"
+    → "Cess in debit note should be greater than or equal to zero"
+    → "Integrated Tax in credit note should be greater than or equal to zero"
+    → "Cess in credit note should be greater than or equal to zero"
+    → "Net Integrated Tax/Cess cannot be negative."
+
+  C.2.8  SHIPPING BILL / EGM
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Please Enter Shipping Bill/ Bill of export/ Endorsed invoice by SEZ- No."
+    → "Shipping bill No can take alphanumeric and special character(/-)only"
+    → "Please enter valid Shipping bill No."
+
+  C.2.9  NUMERIC / FORMAT
+  ~~~~~~~~~~~~~~~~~~~~~~~~
+    → "Document Details No cannot be 0 and special characters alone."
+
+  C.2.10  OTHER
+  ~~~~~~~~~~~~~
+    → "Please Enter Document Details No."
+    → "Please enter valid Document Details No."
+    → "Please Enter Integrated Amount in debit note"
+    → "Please Enter Integrated Amount in credit note"
+
+--------------------------------------------------------------------------------
+C.3  POPUP / MSGBOX ERRORS (Shown to user as dialog boxes)
+--------------------------------------------------------------------------------
+
+  → "Error Encountered"
+  → "Please type atleast one record to create file to upload"
+  → "Valid GSTIN is Mandatory"
+  → "Valid From Return Period is Mandatory"
+  → "Valid To Return Period is Mandatory"
+  → "File has been created and placed in"
+  → "errors"
+
+--------------------------------------------------------------------------------
+TOTAL UNIQUE ERROR MESSAGES: 100
+  Header-level : 15
+  Row-level    : 78
+  MsgBox/Popup : 7
+--------------------------------------------------------------------------------
+
+================================================================================
+  END OF HOLISTIC REFERENCE — ALL DATA FOR THIS REFUND TYPE IS ABOVE
+================================================================================

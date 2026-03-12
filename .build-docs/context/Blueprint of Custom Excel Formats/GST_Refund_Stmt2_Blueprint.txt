@@ -1,0 +1,205 @@
+================================================================================
+  GST REFUND STATEMENT 2 — CUSTOM TEMPLATE BLUEPRINT
+  Refund of Tax Paid on Export of Services with Payment of Tax (EXPWP)
+  Template File: GST_Refund_Stmt2_Template.xlsx
+  For App Developer Reference
+================================================================================
+
+================================================================================
+1. TEMPLATE IDENTITY
+================================================================================
+
+Template File        : GST_Refund_Stmt2_Template.xlsx
+Refund Code          : EXPWP
+JSON Version         : 3.0 (updated April 2025)
+JSON Statement Key   : stmt02
+Legal Basis          : Section 54(3) CGST Act, Rule 89(2)(c), Rule 89(4)
+Refund Category      : Tax Paid (IGST paid on export invoice — refund of that tax)
+
+Sheets:
+  1. Overview     — Metadata and colour coding legend
+  2. Header       — GSTIN only (no return periods in v3.0)
+  3. Data         — Export service invoices + tax + BRC/FIRC (11 columns, data from row 2)
+  4. Help         — Field specs, BRC linking modes, validation rules, tool usage
+
+Row 1 = Column headers (colour-coded: blue=mandatory, green=optional, light blue=conditional)
+Data starts at row 2 — no gap row
+
+================================================================================
+2. HEADER SHEET — Reading Logic
+================================================================================
+
+Cell Mapping:
+  A2 = "GSTIN"          → B2 = value  → JSON key: "gstin"
+
+Hardcoded by app:
+  "refundRsn": "EXPWP"
+  "version": "3.0"
+
+IMPORTANT — NO RETURN PERIODS:
+  In v3.0 (April 2025 update), From/To Return Period fields were removed from
+  JSON output. The government VBA has them commented out. Our template does not
+  include them at all. If a user asks about return periods, this is by design.
+
+Validations:
+  GSTIN  → Regex: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$
+           Auto upper-case and trim.
+
+================================================================================
+3. DATA SHEET — Column Specification
+================================================================================
+
+Col | Header         | JSON Key     | Type          | Mandatory   | Notes
+----|----------------|-------------|---------------|-------------|-------------------
+A   | Doc Type       | docType     | Text          | Required    | Dropdown: Invoice, Debit Note, Credit Note
+B   | Doc No         | inum        | Text (16)     | Required    | Alphanumeric + / and -
+C   | Doc Date       | idt         | DD-MM-YYYY    | Required    | >= 01-07-2017, <= current
+D   | Doc Value      | val         | Number (15,2) | Required    | >= 0; >= Taxable Value + IGST + Cess
+E   | Taxable Value  | iamtTxval   | Number (15,2) | Required    | >= 0
+F   | IGST           | iamt        | Number (15,2) | Required    | >= 0; <= Taxable Value
+G   | Cess           | cess        | Number (15,2) | Optional    | >= 0 if provided; defaults to 0 in JSON
+H   | BRC No         | brcfircnum  | Text (2-30)   | Conditional | See BRC linking logic below
+I   | BRC Date       | brcfircdt   | DD-MM-YYYY    | Conditional | Can be BEFORE 01-07-2017
+J   | BRC Value      | brcfircval  | Number (15,2) | Conditional | >= 0 if provided
+K   | BRC Group ID   | (not in JSON)| Text          | Optional    | For --brc-mode group only
+
+Data starts at row 2.
+
+================================================================================
+4. BRC/FIRC LINKING LOGIC
+================================================================================
+
+Same two modes as S03:
+
+MODE 1: ADJACENT (Default — python main.py input.xlsx)
+  BRC on a row covers all invoices above it until the previous BRC row.
+  A row with ONLY BRC data (no Doc Type) is a BRC-only row.
+
+  JSON generation handles three row types:
+    Type A: Doc + BRC in same row → emit invoice keys + BRC keys as two chunks
+    Type B: Doc only (no BRC) → emit invoice keys only
+    Type C: BRC only (no Doc Type) → emit BRC keys only (sno + brcfircnum/dt/val)
+
+MODE 2: GROUP ID (python main.py input.xlsx --brc-mode group)
+  Use BRC Group ID column to explicitly link invoices to a BRC.
+  Ungrouped invoices with no BRC and no Group ID → validation ERROR.
+
+IMPORTANT — BRC DATE EXCEPTION:
+  BRC/FIRC date CAN be before 01-07-2017. This is different from document dates
+  which must be >= 01-07-2017. The government VBA explicitly allows this.
+  Reason: foreign exchange realisation may have occurred before GST era.
+
+================================================================================
+5. JSON OUTPUT SCHEMA
+================================================================================
+
+ENVELOPE:
+{
+  "gstin": "[from Header B2]",
+  "refundRsn": "EXPWP",
+  "version": "3.0",
+  "stmt02": [ ...array of nodes... ]
+}
+
+NOTE: No "fromFp" or "toFp" keys in v3.0.
+
+PER-ROW JSON NODE (document + BRC):
+{
+  "sno": [auto-generated serial],
+  "docType": "[Doc Type]",
+  "inum": "[Doc No]",
+  "idt": "[Doc Date]",
+  "val": [Doc Value],
+  "iamtTxval": [Taxable Value],
+  "iamt": [IGST],
+  "cess": [Cess or 0]
+}
+
+BRC-ONLY JSON NODE:
+{
+  "sno": [auto-generated serial],
+  "brcfircnum": "[BRC No]",
+  "brcfircdt": "[BRC Date]",
+  "brcfircval": [BRC Value]
+}
+
+COMBINED ROW (Doc + BRC on same row):
+  The VBA emits the BRC chunk FIRST, then the invoice chunk.
+  Your app should follow the same order for portal compatibility.
+
+SERIAL NUMBER:
+  Auto-generated by app (1, 2, 3...). Assigned to every non-empty row.
+  Government VBA uses autoGenSerial() which numbers only rows where
+  Doc Type (Col B in govt format) is not blank.
+
+================================================================================
+6. REGEX PATTERNS FOR APP VALIDATION
+================================================================================
+
+GSTIN_REGEX      = ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z1-9A-J]{1}[0-9A-Z]{1}$
+INV_DATE_REGEX   = ^[0-3]{1}[0-9]{1}[-]{1}[0-1]{1}[0-9]{1}[-]{1}[0-9]{4}$
+INVOICE_REGEX    = ^[a-zA-Z0-9\/-]{0,16}$
+AMT_REGEX        = ^([0-9]{0,15})([.][0-9]{0,2})?$
+BRC_NO_REGEX     = ^[a-zA-Z0-9]{2,30}$
+
+================================================================================
+7. APP PROCESSING FLOW
+================================================================================
+
+1. Read Header sheet → extract GSTIN
+2. Validate GSTIN (regex)
+3. Read Data sheet from row 2 → skip empty rows
+4. For each row:
+   a. Determine row type: Doc+BRC, Doc-only, or BRC-only
+   b. Validate Doc Type (must be Invoice/Debit Note/Credit Note)
+   c. Validate Doc No, Doc Date, Doc Value, Taxable Value, IGST
+   d. Validate Cess if present
+   e. Validate BRC fields if present (BRC No regex, BRC Date, BRC Value)
+   f. Check: IGST <= Taxable Value
+   g. Check: Doc Value >= Taxable Value (in practice, Doc Value >= Taxable + Tax)
+   h. Check for duplicates
+   i. Accumulate running totals (+Invoice/DN, −CN)
+   j. Build JSON node(s)
+5. If any errors → report all, do NOT generate JSON
+6. If zero errors → assemble JSON envelope, write to file
+
+================================================================================
+8. THINGS TO WATCH OUT FOR (APP DEVELOPER NOTES)
+================================================================================
+
+1. NO RETURN PERIODS IN JSON — v3.0 removed fromFp/toFp from the JSON
+   envelope. The government VBA has these lines commented out. Do NOT include
+   them even if the user asks. The portal won't reject them but they serve
+   no purpose.
+
+2. BRC DATE CAN PRE-DATE GST — Unlike all document dates which must be
+   >= 01-07-2017, BRC/FIRC dates have no minimum date restriction. The
+   government VBA explicitly allows pre-GST BRC dates.
+
+3. CESS DEFAULTS TO 0 — If Cess column is blank, JSON should have "cess": 0,
+   not omit the key. The government VBA explicitly sets 0 for blank cess.
+
+4. DOC VALUE vs TAXABLE VALUE — S02 has BOTH Doc Value (total invoice value
+   including tax) and Taxable Value (value before tax). S01A inward only has
+   Taxable Value. This is because S02 is a tax-paid refund — the total value
+   matters for verification.
+
+5. DUPLICATE KEY — DocType suffix (last 4 chars) + "_" + DocNo + "_" + FY.
+   If month is Jan-Mar, decrement FY by 1. This is how the government VBA
+   constructs the duplicate check key.
+
+6. CREDIT NOTE HANDLING — Credit Notes subtract from running totals for
+   IGST, Cess, and Document Value. Invoice and Debit Note add.
+
+7. BRC ORDER IN JSON — When a row has both document and BRC data, the
+   government VBA writes the BRC JSON chunk FIRST, then the invoice chunk.
+   Follow this order.
+
+8. SINGLE SHEET — Unlike S03 (which splits Goods/Services) or S01A (which
+   splits Inward/Outward), S02 has only one data sheet. All export services
+   go into the same sheet. No type column needed — everything is export of
+   services with payment.
+
+================================================================================
+  END OF S02 CUSTOM TEMPLATE BLUEPRINT
+================================================================================

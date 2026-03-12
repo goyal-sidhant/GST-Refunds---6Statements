@@ -11,6 +11,7 @@ CONTAINS:
 - parse_period()              — Converts various period inputs to MM-YYYY string
 - parse_date_to_object()      — Converts DD-MM-YYYY string to datetime.date
 - period_to_mmyyyy()          — Converts MM-YYYY to mmyyyy (strips hyphen for JSON)
+- period_to_date_range()      — Converts MM-YYYY to (first_day, last_day) date objects
 - get_financial_year()        — Returns FY year for a given date/month
 - get_month_from_date()       — Extracts month number from DD-MM-YYYY string
 - is_date_before()            — Compares two DD-MM-YYYY date strings
@@ -22,7 +23,7 @@ USED BY:
 - core/field_validators.py    → parse_date(), parse_date_to_object()
 - core/header_validator.py    → period_to_mmyyyy()
 - core/duplicate_detector.py  → get_financial_year(), get_month_from_date()
-- core/date_validators.py     → is_date_before()
+- core/date_validators.py     → is_date_before(), period_to_date_range()
 - core/generators/*.py        → period_to_mmyyyy()
 - readers/template_reader.py  → parse_period() for header period cells
 
@@ -31,8 +32,10 @@ CHANGE LOG:
 |------------|-------------------------------------|------------------------------------|
 | 11-03-2026 | Created — date utility functions    | Phase 0 infrastructure setup       |
 | 12-03-2026 | Added parse_period() for MM-YYYY    | Excel converts 04-2024 to datetime |
+| 12-03-2026 | Added period_to_date_range()        | BRC date must fall within period    |
 """
 
+import calendar
 from datetime import date, datetime
 from typing import Optional
 
@@ -178,6 +181,46 @@ def period_to_mmyyyy(period_str: str) -> str:
     if not period_str:
         return ""
     return period_str.replace("-", "")
+
+
+def period_to_date_range(period_str: str) -> Optional[tuple[date, date]]:
+    """
+    WHAT:
+        Converts an MM-YYYY period string to a (first_day, last_day) tuple.
+        For example, "03-2025" → (date(2025, 3, 1), date(2025, 3, 31)).
+
+    WHY ADDED:
+        BRC/FIRC dates must fall within the refund period (From → To).
+        We need to compare a DD-MM-YYYY date against the boundaries of
+        an MM-YYYY period. This function gives us those boundaries.
+
+    CALLED BY:
+        → core/date_validators.py → validate_brc_within_period()
+
+    EDGE CASES HANDLED:
+        - February in leap years → calendar.monthrange handles correctly
+        - None or empty input → returns None
+        - Invalid format → returns None
+
+    PARAMETERS:
+        period_str (str): Period in MM-YYYY format (e.g., "03-2025").
+
+    RETURNS:
+        tuple[date, date] or None: (first_day, last_day) of the month,
+        or None if the input is empty or unparseable.
+    """
+    if not period_str:
+        return None
+    try:
+        parts = period_str.split("-")
+        month = int(parts[0])
+        year = int(parts[1])
+        first_day = date(year, month, 1)
+        last_day_num = calendar.monthrange(year, month)[1]
+        last_day = date(year, month, last_day_num)
+        return (first_day, last_day)
+    except (ValueError, IndexError):
+        return None
 
 
 def get_financial_year(month: int, year: int) -> int:

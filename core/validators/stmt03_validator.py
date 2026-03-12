@@ -36,6 +36,7 @@ CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 11-03-2026 | Created — S03 statement validator   | Phase 1: first statement type      |
+| 12-03-2026 | BRC date must fall within period    | Realization must be in refund period|
 """
 
 from models.statement_config import StatementConfig
@@ -54,7 +55,7 @@ from core.field_validators import (
     validate_brc_fields,
 )
 from core.duplicate_detector import DuplicateDetector
-from core.date_validators import validate_sb_after_invoice, validate_egm_after_sb
+from core.date_validators import validate_sb_after_invoice, validate_egm_after_sb, validate_brc_within_period
 from core.brc_linker import (
     BrcLinkMode,
     link_brc_adjacent,
@@ -123,9 +124,9 @@ def validate_stmt03(
 
         for data_row in rows:
             if is_goods:
-                _validate_goods_row(data_row, sheet_name, result, dup_detector)
+                _validate_goods_row(data_row, sheet_name, result, dup_detector, header)
             else:
-                _validate_services_row(data_row, sheet_name, result, dup_detector)
+                _validate_services_row(data_row, sheet_name, result, dup_detector, header)
 
         # --- BRC coverage verification (Services only) ---
         if sheet_config.has_brc_linking:
@@ -151,6 +152,7 @@ def _validate_goods_row(
     sheet: str,
     result: ValidationResult,
     dup_detector: DuplicateDetector,
+    header: HeaderData,
 ) -> None:
     """
     WHAT:
@@ -239,6 +241,12 @@ def _validate_goods_row(
         is_mandatory=False,
     )
 
+    # BRC date must fall within the refund period
+    if brc_date:
+        validate_brc_within_period(
+            brc_date, header.from_period, header.to_period, row, sheet, result,
+        )
+
     # Duplicate BRC detection
     if brc_no:
         dup_detector.check_brc(brc_no, row, sheet, result)
@@ -249,6 +257,7 @@ def _validate_services_row(
     sheet: str,
     result: ValidationResult,
     dup_detector: DuplicateDetector,
+    header: HeaderData,
 ) -> None:
     """
     WHAT:
@@ -300,6 +309,12 @@ def _validate_services_row(
         result=result,
         is_mandatory=False,
     )
+
+    # BRC date must fall within the refund period
+    if brc_date:
+        validate_brc_within_period(
+            brc_date, header.from_period, header.to_period, row, sheet, result,
+        )
 
     # Duplicate BRC detection
     if brc_no:

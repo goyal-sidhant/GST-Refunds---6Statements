@@ -417,6 +417,18 @@ DATE_ORDER_ERRORS: dict[str, str] = {
         "the Shipping Bill Date ({sb_date}). The Export General Manifest "
         "is filed after the shipping bill. Please verify both dates."
     ),
+    "brc_before_from_period": (
+        "Row {row}, {sheet} Sheet: BRC/FIRC Date ({brc_date}) is before the "
+        "start of the refund period ({from_period}). The BRC/FIRC date must "
+        "fall within the refund period — the foreign exchange realization "
+        "must have happened during the period you are claiming refund for."
+    ),
+    "brc_after_to_period": (
+        "Row {row}, {sheet} Sheet: BRC/FIRC Date ({brc_date}) is after the "
+        "end of the refund period ({to_period}). The BRC/FIRC date must "
+        "fall within the refund period — the foreign exchange realization "
+        "must have happened during the period you are claiming refund for."
+    ),
 }
 
 # ---------------------------------------------------------------------------

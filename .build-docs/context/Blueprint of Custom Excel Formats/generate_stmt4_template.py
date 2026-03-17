@@ -161,6 +161,10 @@ for ci, (name, w, fill) in enumerate(cols):
     cell = ws_d.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
 
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['A', 'C', 'F']:  # Recipient GSTIN, Doc No, SB/Endorsed Invoice No
+    ws_d.column_dimensions[text_col].number_format = '@'
+
 sample = ["29AABCT5678Q1Z5", "Invoice", "SEZ/2024/001", "10-09-2024", 800000, "SB2024001", "12-09-2024", 700000, 126000, ""]
 for ci, v in enumerate(sample):
     cell = ws_d.cell(row=2, column=ci+1, value=v if v != "" else None)

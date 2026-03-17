@@ -108,14 +108,19 @@ RECIPIENT_NAME_MAX_LENGTH: int = 200
 # ---------------------------------------------------------------------------
 
 # Valid document type values for the "Doc Type" column.
-# These must match exactly what the custom templates have in their dropdowns.
-DOCUMENT_TYPES: tuple[str, ...] = ("Invoice", "Debit Note", "Credit Note")
+# S01A uses "Invoice/Bill of Entry" (government VBA, S01A blueprint line 960).
+# S02–S06 use "Invoice" (confirmed in each government VBA).
+DOCUMENT_TYPES: tuple[str, ...] = (
+    "Invoice", "Invoice/Bill of Entry", "Debit Note", "Credit Note",
+)
 
 # Document types that represent the original supply.
 # Credit Notes and Debit Notes are adjustments.
 CREDIT_NOTE: str = "Credit Note"
 DEBIT_NOTE: str = "Debit Note"
 INVOICE: str = "Invoice"
+# S01A-specific: government VBA dropdown and JSON use this exact string.
+INVOICE_BOE: str = "Invoice/Bill of Entry"
 
 # ---------------------------------------------------------------------------
 # S01A — Inward Supply Types
@@ -158,8 +163,8 @@ INWARD_IGST_ONLY_TYPES: tuple[str, ...] = (
 # This is unique to ISD — all others use IGST XOR (CGST+SGST).
 INWARD_ALL_TAX_ALLOWED_TYPE: str = "Inward Supplies from ISD"
 
-# Inward type that restricts Doc Type to Invoice only (no DN/CN).
-# Import of Goods — government VBA validates "Invoice" or "Invoice/Bill of Entry" only.
+# Inward type that restricts Doc Type to Invoice/Bill of Entry only (no DN/CN).
+# Government VBA (S01A blueprint line 960) validates exactly "Invoice/Bill of Entry".
 INWARD_INVOICE_ONLY_TYPE: str = "Import of Goods/Supplies from SEZ to DTA"
 
 # ---------------------------------------------------------------------------

@@ -192,10 +192,15 @@ for ci, (name, width, fill) in enumerate(inward_cols):
     cell.alignment = ALIGN_CENTER
     cell.border = THIN_BORDER
 
+# TEXT format on text-type columns — preserves leading zeros, prevents
+# Excel from converting invoice numbers like "001234" to the number 1234.
+for text_col in ['B', 'D']:  # Supplier GSTIN, Doc No
+    ws_in.column_dimensions[text_col].number_format = '@'
+
 # Sample data at row 2 (no gap row)
 sample = [
     "Inward Supply from Registered Person", "24AABCT1332L1ZX",
-    "Invoice", "INV/2024/001", "15-08-2024", "", 500000, 90000, "", ""
+    "Invoice/Bill of Entry", "INV/2024/001", "15-08-2024", "", 500000, 90000, "", ""
 ]
 for ci, val in enumerate(sample):
     cell = ws_in.cell(row=2, column=ci+1, value=val)
@@ -210,7 +215,7 @@ dv_type.error = "Select a valid Inward Supply Type"
 ws_in.add_data_validation(dv_type)
 dv_type.add('A2:A10001')
 
-dv_doc = DataValidation(type="list", formula1='"Invoice,Debit Note,Credit Note"', allow_blank=True)
+dv_doc = DataValidation(type="list", formula1='"Invoice/Bill of Entry,Debit Note,Credit Note"', allow_blank=True)
 ws_in.add_data_validation(dv_doc)
 dv_doc.add('C2:C10001')
 
@@ -243,7 +248,11 @@ for ci, (name, width, fill) in enumerate(outward_cols):
     cell.alignment = ALIGN_CENTER
     cell.border = THIN_BORDER
 
-sample_out = ["B2B", "Invoice", "SALE/2024/101", "20-08-2024", 200000, 10000, "", ""]
+# TEXT format on text-type columns
+for text_col in ['C']:  # Doc No
+    ws_out.column_dimensions[text_col].number_format = '@'
+
+sample_out = ["B2B", "Invoice/Bill of Entry", "SALE/2024/101", "20-08-2024", 200000, 10000, "", ""]
 for ci, val in enumerate(sample_out):
     cell = ws_out.cell(row=2, column=ci+1, value=val)
     cell.font = FONT_NORMAL_10
@@ -253,7 +262,7 @@ dv_otype = DataValidation(type="list", formula1='"B2B,B2C-Large,B2C-Small"', all
 ws_out.add_data_validation(dv_otype)
 dv_otype.add('A2:A10001')
 
-dv_odoc = DataValidation(type="list", formula1='"Invoice,Debit Note,Credit Note"', allow_blank=True)
+dv_odoc = DataValidation(type="list", formula1='"Invoice/Bill of Entry,Debit Note,Credit Note"', allow_blank=True)
 ws_out.add_data_validation(dv_odoc)
 dv_odoc.add('B2:B10001')
 
@@ -335,7 +344,7 @@ r = help_row(ws_h, r, "Conditional", "Supplier GSTIN", "Text (15)",
     "GSTIN of supplier or ISD.\nRequired for: Registered Person, ISD.\nAuto-filled by app for: Import, RCM (= self GSTIN from Header).\nMust differ from applicant GSTIN.",
     "GSTIN regex; must differ from self")
 r = help_row(ws_h, r, "Required", "Doc Type", "Text",
-    "Type of document.\nValid values: Invoice, Debit Note, Credit Note",
+    "Type of document.\nValid values: Invoice/Bill of Entry, Debit Note, Credit Note\nFor Import of Goods, only Invoice/Bill of Entry is allowed.",
     "Dropdown provided")
 r = help_row(ws_h, r, "Required", "Doc No", "Text (16)",
     "Document number or Bill of Entry number.\nMax 16 alphanumeric characters, / and - allowed.",
@@ -382,7 +391,7 @@ r = help_row(ws_h, r, "Required", "Outward Supply Type", "Text",
     "Type of outward supply.\nValid values: B2B, B2C-Large, B2C-Small",
     "Dropdown provided")
 r = help_row(ws_h, r, "Required", "Doc Type", "Text",
-    "Type of document.\nValid values: Invoice, Debit Note, Credit Note",
+    "Type of document.\nValid values: Invoice/Bill of Entry, Debit Note, Credit Note",
     "Dropdown provided")
 r = help_row(ws_h, r, "Conditional", "Doc No", "Text (16)",
     "Document number.\nFor B2C-Small: leave blank. App auto-fills 'B2COTH' in JSON.\nFor B2B and B2C-Large: mandatory.",

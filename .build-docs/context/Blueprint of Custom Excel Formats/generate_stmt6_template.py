@@ -188,6 +188,10 @@ for ci, (name, w, fill) in enumerate(ii_cols):
     cell = ws_ii.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
 
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['A', 'D']:  # Recipient GSTIN, Doc No
+    ws_ii.column_dimensions[text_col].number_format = '@'
+
 sample_ii = ["27AABCT5678Q1Z5", "", "Invoice", "INV/2024/050", "15-08-2024", 500000, 450000,
              81000, "", "27-Maharashtra", 40500, 40500, "", "27-Maharashtra"]
 for ci, v in enumerate(sample_ii):
@@ -238,6 +242,10 @@ for ci, (name, w, fill) in enumerate(it_cols):
     ws_it.column_dimensions[get_column_letter(col)].width = w
     cell = ws_it.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
+
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['A', 'D']:  # Recipient GSTIN, Doc No
+    ws_it.column_dimensions[text_col].number_format = '@'
 
 sample_it = ["", "Ramesh Kumar", "Invoice", "INV/2024/075", "20-09-2024", 300000, 250000,
              22500, 22500, "", "19-West Bengal", 45000, "", "07-Delhi"]

@@ -45,6 +45,9 @@ CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 12-03-2026 | Created — S01A statement validator   | Phase 5: Inverted Tax Structure    |
+| 17-03-2026 | Auto-convert "Invoice" → "Invoice/   | Govt VBA uses "Invoice/Bill of     |
+|            |   Bill of Entry" for both Inward and |   Entry" for S01A idtype/odtype.   |
+|            |   Outward validation paths           |   JSON must match govt expectation |
 """
 
 from models.statement_config import StatementConfig
@@ -76,6 +79,8 @@ from config.constants import (
     INWARD_INVOICE_ONLY_TYPE,
     OUTWARD_IGST_ONLY_TYPE,
     OUTWARD_CGST_SGST_ONLY_TYPE,
+    INVOICE,
+    INVOICE_BOE,
 )
 from config.error_messages import SUPPLY_TYPE_ERRORS, TAX_ERRORS, SHIPPING_ERRORS
 from config.regex_patterns import GSTIN_REGEX
@@ -175,17 +180,21 @@ def _validate_inward_row(
         supply_type, row, sheet, result, applicant_gstin,
     )
 
-    # --- Doc Type (Import of Goods restricts to Invoice only) ---
+    # --- Doc Type ---
+    # S01A uses "Invoice/Bill of Entry" (government VBA, S01A blueprint line 960).
+    # If user enters "Invoice", auto-convert to "Invoice/Bill of Entry".
     doc_type = validate_doc_type(
         data_row.get_value("Doc Type"), row, sheet, result,
     )
+    if doc_type == INVOICE:
+        doc_type = INVOICE_BOE
     if doc_type and supply_type == INWARD_INVOICE_ONLY_TYPE:
-        if doc_type != "Invoice":
+        if doc_type != INVOICE_BOE:
             result.add_error(
                 message=(
-                    f"Row {row}, {sheet} Sheet: For '{supply_type}', only 'Invoice' "
-                    f"is allowed as Document Type (not '{doc_type}'). This represents "
-                    f"a Bill of Entry."
+                    f"Row {row}, {sheet} Sheet: For '{supply_type}', only "
+                    f"'Invoice/Bill of Entry' is allowed as Document Type "
+                    f"(not '{doc_type}')."
                 ),
                 sheet=sheet, row=row, field_name="Doc Type", category="document",
             )
@@ -430,9 +439,13 @@ def _validate_outward_row(
     is_b2c_small = (supply_type == OUTWARD_CGST_SGST_ONLY_TYPE)
 
     # --- Doc Type ---
+    # S01A uses "Invoice/Bill of Entry" (government VBA).
+    # If user enters "Invoice", auto-convert to "Invoice/Bill of Entry".
     doc_type = validate_doc_type(
         data_row.get_value("Doc Type"), row, sheet, result,
     )
+    if doc_type == INVOICE:
+        doc_type = INVOICE_BOE
 
     # --- Doc No and Doc Date ---
     if is_b2c_small:

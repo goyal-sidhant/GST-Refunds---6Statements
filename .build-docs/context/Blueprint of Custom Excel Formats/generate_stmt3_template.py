@@ -176,6 +176,10 @@ for ci, (name, w, fill) in enumerate(goods_cols):
     cell = ws_g.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
 
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['B', 'F', 'I', 'K']:  # Doc No, SB No, EGM Ref No, BRC No
+    ws_g.column_dimensions[text_col].number_format = '@'
+
 sample_g = ["Invoice", "EXP/001", "01-12-2024", 100000, "INBOM4", "1234567", "05-12-2024", 95000.5, "EGM2024001", "06-12-2024", "", "", "", ""]
 for ci, v in enumerate(sample_g):
     cell = ws_g.cell(row=2, column=ci+1, value=v if v != "" else None)
@@ -208,6 +212,10 @@ for ci, (name, w, fill) in enumerate(svc_cols):
     ws_s.column_dimensions[get_column_letter(col)].width = w
     cell = ws_s.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
+
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['B', 'E']:  # Doc No, BRC No
+    ws_s.column_dimensions[text_col].number_format = '@'
 
 # Sample data — showing multiple patterns
 samples_s = [

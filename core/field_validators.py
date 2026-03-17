@@ -33,6 +33,8 @@ CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 11-03-2026 | Created — shared field validators   | Phase 0 infrastructure setup       |
+| 17-03-2026 | validate_doc_no: float-to-int       | Excel Number-formatted cells       |
+|            |   cleanup (e.g., 1234.0 → "1234")   |   return float; prevents regex fail|
 """
 
 from datetime import date
@@ -94,9 +96,17 @@ def validate_doc_no(
 ) -> str:
     """
     WHAT: Validates document number format (1-16 alphanumeric, / and - allowed).
+          Handles Excel numeric values (e.g., 1234.0 from Number-formatted cells).
     RETURNS: Cleaned doc number string (or empty if invalid).
     """
     cleaned = str(value).strip() if value is not None else ""
+    # Handle Excel float values (e.g., 1234.0 → "1234").
+    # Same pattern as validate_shipping_bill().
+    if cleaned and "." in cleaned:
+        try:
+            cleaned = str(int(float(cleaned)))
+        except (ValueError, OverflowError):
+            pass
     if not cleaned:
         result.add_error(
             message=DOCUMENT_ERRORS["doc_no_empty"].format(row=row, sheet=sheet),

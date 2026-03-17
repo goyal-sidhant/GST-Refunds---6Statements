@@ -30,6 +30,8 @@ CHANGE LOG:
 | Date       | Change                              | Why                                |
 |------------|-------------------------------------|------------------------------------|
 | 12-03-2026 | Created — S01A JSON generator       | Phase 5: Inverted Tax Structure    |
+| 17-03-2026 | Map "Invoice" → "Invoice/Bill of    | Govt VBA S01A uses "Invoice/Bill   |
+|            |   Entry" for idtype and odtype       |   of Entry" in JSON output         |
 """
 
 from models.statement_config import StatementConfig
@@ -41,6 +43,8 @@ from config.constants import (
     OUTWARD_CGST_SGST_ONLY_TYPE,
     B2C_SMALL_DOC_NO,
     B2C_SMALL_DOC_DATE,
+    INVOICE,
+    INVOICE_BOE,
 )
 from utils.string_helpers import is_blank, clean_string
 from utils.number_helpers import to_json_number
@@ -136,11 +140,16 @@ def _build_inward_node(
     # Port Code: include only if present (empty string if blank)
     port_code = clean_string(data_row.get_value("Port Code"))
 
+    # S01A uses "Invoice/Bill of Entry" — map "Invoice" for safety.
+    doc_type = data_row.get_str("Doc Type")
+    if doc_type == INVOICE:
+        doc_type = INVOICE_BOE
+
     return {
         "sno": sno,
         "istype": supply_type,
         "stin": supplier_gstin,
-        "idtype": data_row.get_str("Doc Type"),
+        "idtype": doc_type,
         "inum": data_row.get_str("Doc No"),
         "idt": parse_date(data_row.get_value("Doc Date")),
         "portcd": port_code,
@@ -175,9 +184,14 @@ def _build_outward_node(
         doc_no = data_row.get_str("Doc No")
         doc_date = parse_date(data_row.get_value("Doc Date"))
 
+    # S01A uses "Invoice/Bill of Entry" — map "Invoice" for safety.
+    doc_type = data_row.get_str("Doc Type")
+    if doc_type == INVOICE:
+        doc_type = INVOICE_BOE
+
     return {
         "ostype": supply_type,
-        "odtype": data_row.get_str("Doc Type"),
+        "odtype": doc_type,
         "oinum": doc_no,
         "oidt": doc_date,
         "oval": to_json_number(data_row.get_value("Taxable Value")),

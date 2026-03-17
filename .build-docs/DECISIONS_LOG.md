@@ -268,3 +268,75 @@ Built the complete shared infrastructure:
 - ORDER envelope: orderNo + orderDt + refundRsn="INTRVC" + version="2.0"
 
 **All 6 statements now have validators and generators built and integration tested.**
+
+---
+
+## Session 4 — 12-03-2026 (continued)
+
+### Exchange 1: GitHub Preparation
+
+**Created** `.gitignore` and `README.md` (using user's template from `rebuild_pipeline_FINAL.md`). Added LinkedIn contact: www.linkedin.com/in/goyalsidhant.
+
+**Initial commit**: 102 files, 29,920 lines. Public repo: GST-Refund-JSON-Generator. (GitHub CLI not installed — user to create repo manually and push.)
+
+### Exchange 2: Bug Fix #1 — Empty Sheet + Period DateTime
+
+**User tested S03 with real client data.** Two bugs found:
+
+1. **Empty sheet = ERROR**: Filed Services only (no Goods data). Tool blocked with "Sheet 'Goods' has no data rows." But it's perfectly valid to file only Goods or only Services.
+   - **Fix**: Changed from per-sheet ERROR to post-loop logic. ALL sheets empty → ERROR. SOME sheets empty → WARNING ("Sheet 'Goods' has no data rows — it will be skipped").
+   - **Files**: `readers/template_reader.py`, `config/error_messages.py` (new `all_sheets_empty` + `empty_sheet_skipped`).
+
+2. **Period datetime conversion**: Typed `04-2024` as From Period. Excel auto-converted to `datetime(2024, 4, 1)`. Reader did `str(raw)` → `"2024-04-01 00:00:00"` which failed MM-YYYY regex.
+   - **Fix**: New `parse_period()` function in `utils/date_helpers.py`. Detects datetime objects → extracts `"04-2024"`. Used in `_read_header()` for both from_period and to_period.
+
+**Both fixes in shared code** — apply to all 6 statement types automatically.
+**Committed**: `5a05639`
+
+### Exchange 3: Bug Fix #2 — BRC/FIRC Date Must Fall Within Refund Period
+
+**User tested S03**: Entered BRC/FIRC date of 31-12-2025 with To Period 03-2025. Tool accepted silently.
+
+**Business rule (per user)**: Refund of IGST on export of services is available in the period in which the foreign exchange is **realized** (BRC/FIRC date), NOT when the invoice was raised. If invoice from FY 2022-23 is realized in FY 2024-25, refund is eligible in FY 2024-25. Therefore BRC/FIRC date MUST fall within From Period → To Period.
+
+**Decided**: BRC/FIRC Date >= 1st day of From Period AND <= last day of To Period.
+
+**Files changed:**
+- `utils/date_helpers.py` — New `period_to_date_range()`: MM-YYYY → (first_day, last_day) using `calendar.monthrange()`.
+- `core/date_validators.py` — New `validate_brc_within_period()`: cross-checks BRC date against both period boundaries.
+- `config/error_messages.py` — Two new entries: `brc_before_from_period`, `brc_after_to_period`.
+- `core/validators/stmt03_validator.py` — Threaded `header` to `_validate_goods_row()` and `_validate_services_row()`. Calls `validate_brc_within_period()` after BRC validation on both sheets.
+- `.references/refund_knowledge_base.md` — New knowledge base file documenting the realization-based eligibility rule.
+
+**Only S03 affected** — the only statement with both BRC fields and From/To Period. S02 has BRC but no periods (GSTIN_ONLY header mode).
+
+**Committed**: `26eb202`
+
+---
+
+## Session 5 — 17-03-2026
+
+### Exchange 1: Bug Fix — "Invoice/Bill of Entry" for S01A
+
+**User reported**: Reference JSON file (government-generated) uses `"idtype": "Invoice/Bill of Entry"` and `"odtype": "Invoice/Bill of Entry"` for S01A. Our tool outputs just `"Invoice"` — systematic truncation that will cause portal upload rejection.
+
+**Investigation**: Confirmed by reading government VBA (S01A blueprint line 960): the dropdown value is literally `"Invoice/Bill of Entry"` for both Inward and Outward Type of Document. VBA passes this raw value to JSON. Verified S02-S06 government VBAs all use just `"Invoice"` — only S01A is affected.
+
+**Root cause**: `DOCUMENT_TYPES` constant only had `("Invoice", "Debit Note", "Credit Note")`. The comment at constants.py:162 even acknowledged the government uses "Invoice/Bill of Entry" but the constant was never updated. Custom template dropdown also only offered "Invoice".
+
+**Decided**: Add "Invoice/Bill of Entry" to DOCUMENT_TYPES. S01A validator auto-converts "Invoice" → "Invoice/Bill of Entry" for backwards compatibility. S01A generator has safety mapping. Custom S01A template dropdown updated. No change to S02-S06.
+
+**Files**: config/constants.py, core/validators/stmt01a_validator.py, core/generators/stmt01a_generator.py, generate_stmt1a_template.py
+
+### Exchange 2: Bug Fix — Invoice Number Must Be Text (Leading Zero Preservation)
+
+**User reported**: Invoice numbers must be exact text to match GSTR-1/GSTR-2B. Leading zero stripping (e.g., "001234" → "1234") is wrong. Applies to all refund types.
+
+**Investigation**: When Excel cells are Number-formatted, openpyxl returns int/float — leading zeros already lost. Also `str(1234.0)` → `"1234.0"` fails DOC_NO_REGEX. The `validate_shipping_bill()` already handles the float case, but `validate_doc_no()` does not.
+
+**Decided**:
+- Fix all 6 template generators: set `number_format = '@'` (TEXT) on ALL text-type columns (Doc No, Shipping Bill No, BRC No, EGM Ref No) — prevents Excel from converting to Number.
+- Add float-to-int cleanup in `validate_doc_no()` (same pattern as shipping bill).
+- No WARNING when value arrives as numeric — user decided just fix templates.
+
+**Files**: core/field_validators.py, all 6 generate_stmt*_template.py files

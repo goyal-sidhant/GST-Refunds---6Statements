@@ -149,6 +149,10 @@ for ci, (name, w, fill) in enumerate(cols):
     cell = ws_d.cell(row=1, column=col, value=name)
     cell.font = FW; cell.fill = fill; cell.alignment = AC; cell.border = TB
 
+# TEXT format on text-type columns — preserves leading zeros
+for text_col in ['B', 'H']:  # Doc No, BRC No
+    ws_d.column_dimensions[text_col].number_format = '@'
+
 sample = ["Invoice", "SVC/2024/001", "15-08-2024", 500000, 450000, 81000, "", "FIRC2024001", "20-09-2024", 450000, ""]
 for ci, v in enumerate(sample):
     cell = ws_d.cell(row=2, column=ci+1, value=v)
